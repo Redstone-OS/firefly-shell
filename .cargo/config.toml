@@ -1,6 +1,16 @@
 [build]
-target = "x86_64-redstone.json"
+target = "x86_64-unknown-none"
 
-[unstable]
-build-std = ["core", "alloc"]
-build-std-features = ["compiler-builtins-mem"]
+[target.x86_64-unknown-none]
+rustflags = [
+    "-C",
+    "link-arg=-Tlinker.ld",
+    "-C",
+    "target-feature=-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2",
+    "-C",
+    "soft-float",
+    "-C",
+    "relocation-model=static",
+    "-C",
+    "link-arg=-no-pie",
+]
