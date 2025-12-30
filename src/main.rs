@@ -81,6 +81,9 @@ struct Shell {
     cursor_x: u32,
     cursor_y: u32,
     input_buffer: String,
+    input_port: redpowder::ipc::Port,
+    cursor_visible: bool,
+    frame_count: usize,
 }
 
 impl Shell {
@@ -94,6 +97,9 @@ impl Shell {
         let win_x = (screen_w - win_w) / 2;
         let win_y = (screen_h - win_h) / 2;
 
+        // Cria porta de entrada
+        let input_port = redpowder::ipc::Port::create("shell_input", 128).map_err(|_| ())?;
+
         Ok(Self {
             fb,
             win_x,
@@ -103,6 +109,9 @@ impl Shell {
             cursor_x: win_x + PADDING,
             cursor_y: win_y + PADDING,
             input_buffer: String::new(),
+            input_port,
+            cursor_visible: true,
+            frame_count: 0,
         })
     }
 
@@ -138,7 +147,29 @@ impl Shell {
         self.print_prompt();
     }
 
+    fn draw_cursor(&mut self) {
+        let color = if self.cursor_visible {
+            TEXT_COLOR
+        } else {
+            BG_COLOR
+        };
+        // Cursor simples (underscore)
+        let _ = self.fb.fill_rect(
+            self.cursor_x,
+            self.cursor_y + CHAR_HEIGHT,
+            CHAR_WIDTH,
+            2,
+            color,
+        );
+    }
+
     fn print(&mut self, text: &str) {
+        // Apaga cursor antes de imprimir para evitar sujeira
+        let old_vis = self.cursor_visible;
+        self.cursor_visible = false;
+        self.draw_cursor();
+        self.cursor_visible = old_vis;
+
         // Implementação simplificada: não rola a tela ainda, apenas avança
         for c in text.chars() {
             if c == '\n' {
@@ -171,6 +202,10 @@ impl Shell {
 
     fn backspace(&mut self) {
         if !self.input_buffer.is_empty() {
+            // Apaga cursor atual
+            self.cursor_visible = false;
+            self.draw_cursor();
+
             self.input_buffer.pop();
             // Apagar visualmente (recuar cursor e desenhar quadrado da cor de fundo)
             self.cursor_x -= CHAR_WIDTH;
@@ -178,14 +213,22 @@ impl Shell {
                 self.cursor_x,
                 self.cursor_y,
                 CHAR_WIDTH,
-                CHAR_HEIGHT,
+                CHAR_HEIGHT + 2, // Limpa altura total inc cursor
                 BG_COLOR,
             );
+
+            // Força cursor visivel na nova posição
+            self.cursor_visible = true;
+            self.draw_cursor();
         }
     }
 
     fn handle_key(&mut self, c: char) {
         if c == '\n' {
+            // Remove cursor da linha atual
+            self.cursor_visible = false;
+            self.draw_cursor();
+
             self.new_line();
             let cmd = self.input_buffer.clone();
             self.input_buffer.clear();
@@ -196,6 +239,11 @@ impl Shell {
             let mut b = [0; 4];
             self.print(c.encode_utf8(&mut b));
         }
+
+        // Força cursor aparecer logo após digitar
+        self.cursor_visible = true;
+        self.draw_cursor();
+        self.frame_count = 0; // Reset blink timer
     }
 
     fn execute_command(&mut self, cmd: &str) {
@@ -230,19 +278,39 @@ impl Shell {
     }
 
     fn run(&mut self) -> ! {
+        let mut buf = [0u8; 8]; // KeyEvent pack
+        println!("(Shell) Starting event loop...");
+
         loop {
-            if let Ok(Some(event)) = read_key() {
-                if event.pressed {
-                    if let Some(c) = scancode_to_char(event.scancode) {
-                        if c == '\x08' {
-                            // Backspace
-                            self.backspace();
-                        } else {
-                            self.handle_key(c);
+            // Blink cursor
+            self.frame_count += 1;
+            if self.frame_count > 20000 {
+                // Ajustar conforme velocidade do loop
+                self.cursor_visible = !self.cursor_visible;
+                self.draw_cursor();
+                self.frame_count = 0;
+            }
+
+            // Receber evento do input service via IPC
+            match self.input_port.recv(&mut buf, 0) {
+                // Timeout 0 = non-blocking?
+                Ok(len) if len >= 2 => {
+                    let scancode = buf[0];
+                    let pressed = buf[1] != 0;
+
+                    if pressed {
+                        if let Some(c) = scancode_to_char(scancode) {
+                            if c == '\x08' {
+                                self.backspace();
+                            } else {
+                                self.handle_key(c);
+                            }
                         }
                     }
                 }
+                _ => {}
             }
+
             // Pequeno delay para economizar CPU
             redpowder::process::yield_now();
         }
@@ -310,7 +378,11 @@ pub extern "C" fn _start() -> ! {
             shell.init_display();
             shell.run();
         }
-        Err(_) => loop {},
+        Err(_) => {
+            // Tenta imprimir erro direto no framebuffer se possível ou serial via println
+            println!("(Shell) Falha fatal ao iniciar: Erro ao criar porta ou FB");
+            loop {}
+        }
     }
 }
 
