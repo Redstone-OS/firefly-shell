@@ -1,6 +1,10 @@
 //! # Firefly Shell - Terminal Gráfico
 //!
 //! Terminal gráfico do RedstoneOS Desktop Environment.
+//!
+//! Esta versão simplificada desenha diretamente no framebuffer.
+//! Uma versão futura usará o protocolo de janelas para comunicação
+//! com o compositor.
 
 #![no_std]
 #![no_main]
@@ -26,19 +30,14 @@ const TEXT_COLOR: Color = Color::rgb(0, 255, 100);
 const BORDER_COLOR: Color = Color::rgb(100, 100, 120);
 
 /// Margem interna
-const PADDING: u32 = 8;
+const PADDING: u32 = 12;
 
 /// Banner de boas-vindas
-const BANNER: &str = r#"
-  ____          _     _                    
- |  _ \ ___  __| |___| |_ ___  _ __   ___ 
- | |_) / _ \/ _` / __| __/ _ \| '_ \ / _ \
- |  _ <  __/ (_| \__ \ || (_) | | | |  __/
- |_| \_\___|\__,_|___/\__\___/|_| |_|\___|
+const BANNER: &str = "Redstone OS v0.1.0
 
- Redstone OS v0.1.0 (firefly)
- Type 'help' for commands.
-"#;
+Type 'help' for commands.
+
+redstone> _";
 
 // ============================================================================
 // RENDERIZAÇÃO DE TEXTO
@@ -50,7 +49,6 @@ fn draw_char(fb: &mut Framebuffer, x: u32, y: u32, c: char, color: Color) {
         for row in 0..CHAR_HEIGHT {
             let byte = bitmap[row as usize];
             for col in 0..CHAR_WIDTH {
-                // Bit mais significativo = pixel mais à esquerda
                 if (byte >> (7 - col)) & 1 != 0 {
                     let _ = fb.put_pixel(x + col, y + row, color);
                 }
@@ -67,33 +65,12 @@ fn draw_text(fb: &mut Framebuffer, x: u32, y: u32, text: &str, color: Color) {
     for c in text.chars() {
         if c == '\n' {
             cursor_x = x;
-            cursor_y += CHAR_HEIGHT + 2; // Espaçamento entre linhas
+            cursor_y += CHAR_HEIGHT + 2;
         } else {
             draw_char(fb, cursor_x, cursor_y, c, color);
             cursor_x += CHAR_WIDTH;
         }
     }
-}
-
-/// Desenha um retângulo preenchido
-fn fill_rect(fb: &mut Framebuffer, x: u32, y: u32, w: u32, h: u32, color: Color) {
-    for dy in 0..h {
-        for dx in 0..w {
-            let _ = fb.put_pixel(x + dx, y + dy, color);
-        }
-    }
-}
-
-/// Desenha a borda de um retângulo
-fn draw_border(fb: &mut Framebuffer, x: u32, y: u32, w: u32, h: u32, color: Color, thickness: u32) {
-    // Top
-    fill_rect(fb, x, y, w, thickness, color);
-    // Bottom
-    fill_rect(fb, x, y + h - thickness, w, thickness, color);
-    // Left
-    fill_rect(fb, x, y, thickness, h, color);
-    // Right
-    fill_rect(fb, x + w - thickness, y, thickness, h, color);
 }
 
 // ============================================================================
@@ -105,34 +82,31 @@ fn draw_border(fb: &mut Framebuffer, x: u32, y: u32, w: u32, h: u32, color: Colo
 pub extern "C" fn _start() -> ! {
     println!("[Shell] Start!");
 
-    // Obter framebuffer
     if let Ok(mut fb) = Framebuffer::new() {
         println!("[Shell] FB OK");
 
-        // Dimensões da tela
         let screen_w = fb.width();
         let screen_h = fb.height();
 
-        // Dimensões da janela do terminal (80% da tela)
-        let win_w = (screen_w * 80) / 100;
-        let win_h = (screen_h * 80) / 100;
+        // Janela do terminal (60% da tela, centralizada)
+        let win_w = (screen_w * 60) / 100;
+        let win_h = (screen_h * 60) / 100;
         let win_x = (screen_w - win_w) / 2;
         let win_y = (screen_h - win_h) / 2;
 
-        // Desenhar fundo da janela
-        fill_rect(&mut fb, win_x, win_y, win_w, win_h, BG_COLOR);
+        // Desenhar fundo da janela (otimizado com fill_rect)
+        let _ = fb.fill_rect(win_x, win_y, win_w, win_h, BG_COLOR);
 
-        // Desenhar borda
-        draw_border(&mut fb, win_x, win_y, win_w, win_h, BORDER_COLOR, 2);
+        // Desenhar borda (4 linhas)
+        let _ = fb.fill_rect(win_x, win_y, win_w, 2, BORDER_COLOR);
+        let _ = fb.fill_rect(win_x, win_y + win_h - 2, win_w, 2, BORDER_COLOR);
+        let _ = fb.fill_rect(win_x, win_y, 2, win_h, BORDER_COLOR);
+        let _ = fb.fill_rect(win_x + win_w - 2, win_y, 2, win_h, BORDER_COLOR);
 
-        // Desenhar banner
+        // Desenhar texto do banner
         let text_x = win_x + PADDING;
         let text_y = win_y + PADDING;
         draw_text(&mut fb, text_x, text_y, BANNER, TEXT_COLOR);
-
-        // Desenhar prompt
-        let prompt_y = text_y + 12 * (CHAR_HEIGHT + 2); // Após o banner
-        draw_text(&mut fb, text_x, prompt_y, "redstone> _", TEXT_COLOR);
 
         println!("[Shell] Rendered!");
     } else {
