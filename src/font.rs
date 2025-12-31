@@ -1,9 +1,50 @@
-//! # Fonte Bitmap 8x8 - Firefly Shell
+//! # Fonte Bitmap 8x8
 //!
-//! Fonte básica para renderização de texto.
+//! Fonte rasterizada para renderização de texto no modo gráfico.
+//!
+//! ## Formato
+//!
+//! Cada caractere é representado por 8 bytes, onde cada byte
+//! corresponde a uma linha horizontal de 8 pixels.
+//! Bit 7 = pixel mais à esquerda, Bit 0 = pixel mais à direita.
+//!
+//! ## Cobertura
+//!
+//! Caracteres ASCII 32 (espaço) até 126 (~), totalizando 95 glifos.
+//!
+//! ## Uso
+//!
+//! ```rust
+//! if let Some(glyph) = font::get_char_bitmap('A') {
+//!     // glyph é um array de 8 bytes
+//!     for (row, byte) in glyph.iter().enumerate() {
+//!         for col in 0..8 {
+//!             if byte & (0x80 >> col) != 0 {
+//!                 // Desenhar pixel em (x + col, y + row)
+//!             }
+//!         }
+//!     }
+//! }
+//! ```
 
-/// Fonte bitmap 8x8 para caracteres ASCII 32-126
-/// Cada caractere é representado por 8 bytes (1 byte por linha)
+// ============================================================================
+// CONSTANTES
+// ============================================================================
+
+/// Largura de cada caractere em pixels
+pub const CHAR_WIDTH: u32 = 8;
+
+/// Altura de cada caractere em pixels
+pub const CHAR_HEIGHT: u32 = 8;
+
+// ============================================================================
+// FONTE BITMAP
+// ============================================================================
+
+/// Tabela de glifos bitmap 8x8 para ASCII 32-126.
+///
+/// Cada sub-array de 8 bytes representa um caractere,
+/// onde cada byte é uma linha horizontal.
 pub const FONT_8X8: [[u8; 8]; 95] = [
     // Space (32)
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
@@ -135,57 +176,32 @@ pub const FONT_8X8: [[u8; 8]; 95] = [
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF],
     // ` (96)
     [0x30, 0x18, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00],
-    // a (97)
+    // a-z (97-122)
     [0x00, 0x00, 0x78, 0x0C, 0x7C, 0xCC, 0x76, 0x00],
-    // b (98)
     [0xE0, 0x60, 0x7C, 0x66, 0x66, 0x66, 0xDC, 0x00],
-    // c (99)
     [0x00, 0x00, 0x7C, 0xC6, 0xC0, 0xC6, 0x7C, 0x00],
-    // d (100)
     [0x1C, 0x0C, 0x7C, 0xCC, 0xCC, 0xCC, 0x76, 0x00],
-    // e (101)
     [0x00, 0x00, 0x7C, 0xC6, 0xFE, 0xC0, 0x7C, 0x00],
-    // f (102)
     [0x3C, 0x66, 0x60, 0xF8, 0x60, 0x60, 0xF0, 0x00],
-    // g (103)
     [0x00, 0x00, 0x76, 0xCC, 0xCC, 0x7C, 0x0C, 0x78],
-    // h (104)
     [0xE0, 0x60, 0x6C, 0x76, 0x66, 0x66, 0xE6, 0x00],
-    // i (105)
     [0x18, 0x00, 0x38, 0x18, 0x18, 0x18, 0x3C, 0x00],
-    // j (106)
     [0x06, 0x00, 0x0E, 0x06, 0x06, 0x66, 0x66, 0x3C],
-    // k (107)
     [0xE0, 0x60, 0x66, 0x6C, 0x78, 0x6C, 0xE6, 0x00],
-    // l (108)
     [0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00],
-    // m (109)
     [0x00, 0x00, 0xEC, 0xFE, 0xD6, 0xC6, 0xC6, 0x00],
-    // n (110)
     [0x00, 0x00, 0xDC, 0x66, 0x66, 0x66, 0x66, 0x00],
-    // o (111)
     [0x00, 0x00, 0x7C, 0xC6, 0xC6, 0xC6, 0x7C, 0x00],
-    // p (112)
     [0x00, 0x00, 0xDC, 0x66, 0x66, 0x7C, 0x60, 0xF0],
-    // q (113)
     [0x00, 0x00, 0x76, 0xCC, 0xCC, 0x7C, 0x0C, 0x1E],
-    // r (114)
     [0x00, 0x00, 0xDC, 0x76, 0x60, 0x60, 0xF0, 0x00],
-    // s (115)
     [0x00, 0x00, 0x7C, 0xC0, 0x7C, 0x06, 0xFC, 0x00],
-    // t (116)
     [0x30, 0x30, 0xFC, 0x30, 0x30, 0x36, 0x1C, 0x00],
-    // u (117)
     [0x00, 0x00, 0xCC, 0xCC, 0xCC, 0xCC, 0x76, 0x00],
-    // v (118)
     [0x00, 0x00, 0xC6, 0xC6, 0xC6, 0x6C, 0x38, 0x00],
-    // w (119)
     [0x00, 0x00, 0xC6, 0xC6, 0xD6, 0xFE, 0x6C, 0x00],
-    // x (120)
     [0x00, 0x00, 0xC6, 0x6C, 0x38, 0x6C, 0xC6, 0x00],
-    // y (121)
     [0x00, 0x00, 0xC6, 0xC6, 0xCE, 0x76, 0x06, 0x7C],
-    // z (122)
     [0x00, 0x00, 0xFC, 0x98, 0x30, 0x64, 0xFC, 0x00],
     // { (123)
     [0x0E, 0x18, 0x18, 0x70, 0x18, 0x18, 0x0E, 0x00],
@@ -197,10 +213,19 @@ pub const FONT_8X8: [[u8; 8]; 95] = [
     [0x76, 0xDC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
 ];
 
-pub const CHAR_WIDTH: u32 = 8;
-pub const CHAR_HEIGHT: u32 = 8;
+// ============================================================================
+// FUNÇÕES
+// ============================================================================
 
-/// Obtém o bitmap de um caractere ASCII
+/// Obtém o bitmap de um caractere ASCII.
+///
+/// # Parâmetros
+///
+/// * `c` - Caractere ASCII (32-126)
+///
+/// # Retorna
+///
+/// `Some(&[u8; 8])` com o glifo, ou `None` se o caractere não é suportado.
 pub fn get_char_bitmap(c: char) -> Option<&'static [u8; 8]> {
     let code = c as u8;
     if code >= 32 && code <= 126 {
@@ -208,4 +233,17 @@ pub fn get_char_bitmap(c: char) -> Option<&'static [u8; 8]> {
     } else {
         None
     }
+}
+
+/// Calcula a largura em pixels de uma string.
+///
+/// # Parâmetros
+///
+/// * `text` - Texto a medir
+///
+/// # Retorna
+///
+/// Largura em pixels (CHAR_WIDTH * número de caracteres).
+pub fn measure_text_width(text: &str) -> u32 {
+    text.chars().count() as u32 * CHAR_WIDTH
 }
