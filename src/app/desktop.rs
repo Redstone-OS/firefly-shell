@@ -113,7 +113,7 @@ impl Desktop {
             }
 
             // Sleep para não consumir 100% CPU
-            let _ = redpowder::time::sleep(IDLE_INTERVAL_MS);
+            let _ = redpowder::time::sleep(50);
         }
     }
 
