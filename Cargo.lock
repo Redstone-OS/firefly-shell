@@ -3,8 +3,15 @@
 version = 4
 
 [[package]]
+name = "gfx_types"
+version = "0.1.0"
+
+[[package]]
 name = "redpowder"
 version = "0.1.0"
+dependencies = [
+ "gfx_types",
+]
 
 [[package]]
 name = "shell"
