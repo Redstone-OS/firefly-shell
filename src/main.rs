@@ -13,8 +13,9 @@ extern crate alloc;
 mod taskbar;
 
 use core::panic::PanicInfo;
-use redpowder::graphics::{Color, Framebuffer};
+use redpowder::graphics::get_framebuffer_info;
 use redpowder::println;
+use redpowder::window::Window;
 use taskbar::Taskbar;
 
 #[global_allocator]
@@ -25,88 +26,87 @@ static ALLOCATOR: redpowder::mem::heap::SyscallAllocator = redpowder::mem::heap:
 // ============================================================================
 
 /// Cor de fundo do desktop (Azul Profundo - Windows-like)
-const WALLPAPER_COLOR: Color = Color::rgb(0, 120, 215);
+const WALLPAPER_COLOR: u32 = 0xFF0078D7; // ARGB
 
 // ============================================================================
 // SHELL
 // ============================================================================
 
 struct DesktopShell {
-    fb: Framebuffer,
+    window: Window,
     taskbar: Taskbar,
-    // input_port: redpowder::ipc::Port,
 }
 
 impl DesktopShell {
     fn new() -> Result<Self, ()> {
-        // Tenta conectar ao Framebuffer
-        // NOTA: Em um sistema ideal, pediríamos uma superfície ao Compositor.
-        // Como paliativo temporário, desenhamos direto no FB com cuidado.
-        let fb = Framebuffer::new().map_err(|_| ())?;
-        let screen_w = fb.width();
-        let screen_h = fb.height();
+        // 1. Obter tamanho da tela
+        let info = get_framebuffer_info().map_err(|_| ())?;
+        let screen_w = info.width;
+        let screen_h = info.height;
+
+        println!("[Shell] Screen resolution: {}x{}", screen_w, screen_h);
+
+        // 2. Criar Janela Fullscreen (Desktop Layer)
+        // No futuro, isso seria uma layer especial (Desktop).
+        // Por enquanto é uma janela normal que cobre tudo.
+        let window = Window::create(0, 0, screen_w, screen_h).map_err(|_| ())?;
 
         let taskbar = Taskbar::new(screen_w, screen_h);
 
-        // Cria porta de entrada com capacidade 32
-        // Input por enquanto desativado no Shell para permitir que o Terminal o capture
-        // let input_port = redpowder::ipc::Port::create("shell_input", 32).map_err(|_| ())?;
-
-        Ok(Self {
-            fb,
-            taskbar,
-            // input_port,
-        })
+        Ok(Self { window, taskbar })
     }
 
     fn run(&mut self) -> ! {
         println!("[Shell] Starting Desktop Environment...");
 
-        // 1. Desenhar Wallpaper
-        self.draw_wallpaper();
-
-        // 2. Desenhar Taskbar inicial
-        self.taskbar.draw(&mut self.fb);
+        // 1. Desenhar Wallpaper e Taskbar inicial
+        self.redraw();
 
         println!("[Shell] Desktop ready!");
 
         // Loop de eventos
-        // let mut msg_buf = [0u8; 32];
         loop {
-            // Processar mensagens de input
-            // 0 = não bloqueante (retorna 0 bytes se vazio)
-            /*
-            while let Ok(len) = self.input_port.recv(&mut msg_buf, 0) {
-                if len > 0 {
-                    // TODO: Processar scancode
-                    // Apenas drenamos
-                } else {
-                    break;
+            // Poll eventos
+            let dirty = false;
+
+            for event in self.window.poll_events() {
+                match event {
+                    redpowder::event::Event::Input(_input) => {
+                        // TODO: Processar cliques na taskbar / menu iniciar
+                    }
+                    redpowder::event::Event::Resize(resize) => {
+                        println!("[Shell] Resize event: {}x{}", resize.width, resize.height);
+                        // TODO: Reajustar layout se compositor mudar resolução
+                    }
+                    _ => {}
                 }
             }
-            */
 
-            // Re-desenha taskbar periodicamente (ex: relógio)
-            // Futuro: Esperar eventos do mouse/teclado via IPC do Compositor
-
-            // self.taskbar.update();
-            // self.taskbar.draw(&mut self.fb);
-
-            redpowder::process::yield_now();
+            if dirty {
+                self.redraw();
+            } else {
+                // Dormir para economizar CPU
+                redpowder::time::sleep(100).unwrap();
+            }
         }
     }
 
-    fn draw_wallpaper(&mut self) {
-        // Preenche área de trabalho
+    fn redraw(&mut self) {
+        // 1. Wallpaper
         // A taskbar sabe qual a área de trabalho
         let (x, y, w, h) = self
             .taskbar
-            .get_work_area(self.fb.width(), self.fb.height());
+            .get_work_area(self.window.width, self.window.height);
 
-        // Desenha apenas a área visível do wallpaper
-        let _ = self.fb.fill_rect(x, y, w, h, WALLPAPER_COLOR);
+        self.window.fill_rect(x, y, w, h, WALLPAPER_COLOR);
 
-        // TODO: Desenhar ícones do desktop
+        // 2. Taskbar
+        self.taskbar.draw(&mut self.window);
+
+        // 3. Present
+        if let Err(e) = self.window.present() {
+            println!("[Shell] Failed to present: {:?}", e);
+        }
     }
 }
 
@@ -115,19 +115,17 @@ impl DesktopShell {
 // ============================================================================
 
 #[no_mangle]
+#[link_section = ".text._start"]
 pub extern "C" fn _start() -> ! {
     // Pequeno delay para garantir que Compositor iniciou
-    // TODO: Usar sincronização real via IPC
-    for _ in 0..100000 {
-        core::hint::spin_loop();
-    }
+    redpowder::time::sleep(500).ok();
 
     match DesktopShell::new() {
         Ok(mut shell) => {
             shell.run();
         }
         Err(_) => {
-            println!("[Shell] ERRO FATAL: Falha ao acessar vídeo");
+            println!("[Shell] ERRO FATAL: Falha ao iniciar Desktop");
             loop {}
         }
     }
