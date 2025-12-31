@@ -47,9 +47,22 @@ impl DesktopShell {
         println!("[Shell] Screen resolution: {}x{}", screen_w, screen_h);
 
         // 2. Criar Janela Fullscreen (Desktop Layer)
-        // No futuro, isso seria uma layer especial (Desktop).
-        // Por enquanto é uma janela normal que cobre tudo.
-        let window = Window::create(0, 0, screen_w, screen_h).map_err(|_| ())?;
+        // Retry loop para garantir que o compositor está pronto
+        let mut attempts = 0;
+        let window = loop {
+            match Window::create(0, 0, screen_w, screen_h) {
+                Ok(w) => break w,
+                Err(_) => {
+                    attempts += 1;
+                    if attempts >= 10 {
+                        println!("[Shell] Failed to connect to compositor after 10 attempts.");
+                        return Err(());
+                    }
+                    println!("[Shell] Waiting for compositor... ({}/10)", attempts);
+                    redpowder::time::sleep(500).ok();
+                }
+            }
+        };
 
         let taskbar = Taskbar::new(screen_w, screen_h);
 
