@@ -19,14 +19,6 @@ pub struct Wallpaper {
 }
 
 impl Wallpaper {
-    /// Cria um novo wallpaper com área padrão.
-    pub fn new(width: u32, height: u32) -> Self {
-        Self {
-            bounds: (0, 0, width, height),
-            use_gradient: true,
-        }
-    }
-
     /// Cria wallpaper com área personalizada (para excluir taskbar).
     pub fn with_bounds(x: u32, y: u32, width: u32, height: u32) -> Self {
         Self {
@@ -39,6 +31,10 @@ impl Wallpaper {
     pub fn draw(&self, window: &mut Window) {
         let (x, y, w, h) = self.bounds;
 
+        if h == 0 || w == 0 {
+            return; // Evitar divisão por zero
+        }
+
         if self.use_gradient {
             self.draw_gradient(window, x, y, w, h);
         } else {
@@ -48,31 +44,44 @@ impl Wallpaper {
 
     /// Desenha gradiente vertical (laranja para vermelho escuro)
     fn draw_gradient(&self, window: &mut Window, x: u32, y: u32, w: u32, h: u32) {
-        // Cores do gradiente (ARGB)
+        // Cores do gradiente (RGB como u8)
         // Topo: Laranja vibrante
-        let top_r: u32 = 0xFF;
-        let top_g: u32 = 0x6B;
-        let top_b: u32 = 0x35;
+        let top_r: u8 = 0xFF;
+        let top_g: u8 = 0x6B;
+        let top_b: u8 = 0x35;
 
         // Base: Laranja escuro / Vermelho
-        let bot_r: u32 = 0xCC;
-        let bot_g: u32 = 0x33;
-        let bot_b: u32 = 0x00;
+        let bot_r: u8 = 0xCC;
+        let bot_g: u8 = 0x33;
+        let bot_b: u8 = 0x00;
 
         for row in 0..h {
-            // Calcular interpolação (0.0 a 1.0)
-            let t = row as u32;
-            let h_val = h;
+            // Interpolação linear usando aritmética saturada
+            let r = lerp_u8(top_r, bot_r, row, h);
+            let g = lerp_u8(top_g, bot_g, row, h);
+            let b = lerp_u8(top_b, bot_b, row, h);
 
-            // Interpolar cada componente de cor
-            let r = top_r + ((bot_r as i32 - top_r as i32) * t as i32 / h_val as i32) as u32;
-            let g = top_g + ((bot_g as i32 - top_g as i32) * t as i32 / h_val as i32) as u32;
-            let b = top_b + ((bot_b as i32 - top_b as i32) * t as i32 / h_val as i32) as u32;
-
-            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
 
             // Desenhar linha horizontal
             window.fill_rect(x, y + row, w, 1, color);
         }
     }
+}
+
+/// Interpolação linear segura entre dois valores u8
+fn lerp_u8(start: u8, end: u8, current: u32, total: u32) -> u8 {
+    if total == 0 {
+        return start;
+    }
+
+    // Usar i32 para evitar overflow e depois clampar
+    let start_i = start as i32;
+    let end_i = end as i32;
+    let diff = end_i - start_i;
+
+    let result = start_i + (diff * current as i32 / total as i32);
+
+    // Clampar para range válido de u8
+    result.clamp(0, 255) as u8
 }

@@ -3,6 +3,8 @@
 //! Definições centralizadas de todas as cores usadas no Shell.
 //! Formato: ARGB (Alpha, Red, Green, Blue)
 
+#![allow(dead_code)]
+
 // ============================================================================
 // CORES DO DESKTOP
 // ============================================================================

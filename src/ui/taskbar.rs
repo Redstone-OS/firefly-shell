@@ -64,6 +64,7 @@ impl Taskbar {
     }
 
     /// Retorna a posição Y da taskbar.
+    #[allow(dead_code)]
     pub fn top(&self) -> u32 {
         self.y
     }
@@ -334,6 +335,7 @@ impl Taskbar {
     }
 
     /// Alterna estado do menu iniciar.
+    #[allow(dead_code)]
     pub fn toggle_start_menu(&mut self) {
         self.start_menu_open = !self.start_menu_open;
     }

@@ -4,4 +4,5 @@
 
 pub mod colors;
 
-pub use colors::*;
+// Re-export específico ao invés de wildcard
+// Removido pub use colors::* pois o taskbar usa crate::theme::colors diretamente

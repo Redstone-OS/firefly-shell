@@ -18,7 +18,8 @@ use redpowder::window::Window;
 // CONSTANTES
 // ============================================================================
 
-/// Intervalo de idle entre frames (ms)
+/// Intervalo de idle entre frames (ms) - reservado para uso futuro
+#[allow(dead_code)]
 const IDLE_INTERVAL_MS: u64 = 16;
 
 // ============================================================================
