@@ -17,7 +17,7 @@ pub const DESKTOP_BG_DARK: u32 = 0xFF1a1a2e;
 // CORES DA TASKBAR
 // ============================================================================
 
-/// Cor de fundo da taskbar
+/// Cor de fundo da taskbar (escuro translúcido)
 pub const TASKBAR_BG: u32 = 0xFF1E1E28;
 
 /// Cor da borda superior da taskbar
@@ -27,10 +27,23 @@ pub const TASKBAR_BORDER: u32 = 0xFF3C3C50;
 pub const START_BUTTON_BG: u32 = 0xFF4682B4;
 
 /// Cor do botão de app ativo
-pub const APP_BUTTON_ACTIVE: u32 = 0xFF46465A;
+pub const APP_BUTTON_ACTIVE: u32 = 0xFF3A3A4C;
 
 /// Cor do botão de app hover
-pub const APP_BUTTON_HOVER: u32 = 0xFF56566A;
+pub const APP_BUTTON_HOVER: u32 = 0xFF4A4A5C;
+
+/// Cor de destaque (indicador de app ativo)
+pub const ACCENT: u32 = 0xFFFF6B35;
+
+// ============================================================================
+// CORES DO MENU
+// ============================================================================
+
+/// Cor de fundo do menu
+pub const MENU_BG: u32 = 0xFF252530;
+
+/// Cor do item hover
+pub const MENU_ITEM_HOVER: u32 = 0xFF3A3A4C;
 
 // ============================================================================
 // CORES DE TEXTO/ÍCONES
@@ -45,6 +58,9 @@ pub const TEXT_SECONDARY: u32 = 0xFFAAAAAA;
 /// Texto desativado
 pub const TEXT_DISABLED: u32 = 0xFF666666;
 
+/// Verde (indicadores positivos)
+pub const GREEN: u32 = 0xFF3FB950;
+
 // ============================================================================
 // CORES DO SISTEMA
 // ============================================================================
@@ -57,9 +73,6 @@ pub const BLACK: u32 = 0xFF000000;
 
 /// Vermelho (erro/fechar)
 pub const RED: u32 = 0xFFFF0000;
-
-/// Verde (sucesso)
-pub const GREEN: u32 = 0xFF00FF00;
 
 /// Azul (informação)
 pub const BLUE: u32 = 0xFF0000FF;

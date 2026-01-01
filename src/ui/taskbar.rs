@@ -6,7 +6,7 @@
 //!
 //! - Botão Iniciar (canto esquerdo)
 //! - Área de aplicações abertas (centro)
-//! - System Tray + Relógio (canto direito - futuro)
+//! - System Tray + Relógio (canto direito)
 
 use crate::theme::colors;
 use redpowder::window::Window;
@@ -30,6 +30,9 @@ pub const ICON_MARGIN: u32 = 4;
 /// Padding interno da taskbar
 const PADDING: u32 = 4;
 
+/// Largura da área de system tray
+const SYSTEM_TRAY_WIDTH: u32 = 120;
+
 // ============================================================================
 // TASKBAR
 // ============================================================================
@@ -44,6 +47,8 @@ pub struct Taskbar {
     pub width: u32,
     /// Altura
     pub height: u32,
+    /// Menu iniciar aberto
+    pub start_menu_open: bool,
 }
 
 impl Taskbar {
@@ -54,6 +59,7 @@ impl Taskbar {
             y: screen_height.saturating_sub(HEIGHT),
             width: screen_width,
             height: HEIGHT,
+            start_menu_open: false,
         }
     }
 
@@ -64,17 +70,25 @@ impl Taskbar {
 
     /// Desenha a taskbar na janela.
     pub fn draw(&self, window: &mut Window) {
-        // Fundo da taskbar
+        // Fundo da taskbar (com leve transparência simulada)
         window.fill_rect(self.x, self.y, self.width, self.height, colors::TASKBAR_BG);
 
-        // Borda superior
+        // Borda superior (linha de destaque)
         window.fill_rect(self.x, self.y, self.width, 1, colors::TASKBAR_BORDER);
 
         // Botão Iniciar
         self.draw_start_button(window);
 
-        // Área de apps (placeholder)
+        // Área de apps (placeholder com 1 app)
         self.draw_app_button(window, 0);
+
+        // System Tray (canto direito)
+        self.draw_system_tray(window);
+
+        // Menu iniciar (se aberto)
+        if self.start_menu_open {
+            self.draw_start_menu(window);
+        }
     }
 
     /// Desenha o botão iniciar.
@@ -92,7 +106,7 @@ impl Taskbar {
             colors::START_BUTTON_BG,
         );
 
-        // Ícone (4 quadrados - logo do Windows invertido)
+        // Ícone (4 quadrados - logo estilo Windows)
         self.draw_windows_icon(window, btn_x, btn_y, btn_h);
     }
 
@@ -128,31 +142,200 @@ impl Taskbar {
         // Fundo do botão
         window.fill_rect(btn_x, btn_y, btn_w, btn_h, colors::APP_BUTTON_ACTIVE);
 
-        // Ícone placeholder (borda de janela)
-        self.draw_window_icon(window, btn_x + 4, btn_y + 4, btn_h - 8);
+        // Indicador de ativo (linha inferior colorida)
+        window.fill_rect(btn_x + 4, btn_y + btn_h - 3, btn_w - 8, 2, colors::ACCENT);
+
+        // Ícone placeholder (terminal)
+        self.draw_terminal_icon(window, btn_x + 4, btn_y + 4, btn_h - 8);
     }
 
-    /// Desenha um ícone placeholder de janela.
-    fn draw_window_icon(&self, window: &mut Window, x: u32, y: u32, size: u32) {
-        let border_width = 2;
+    /// Desenha ícone de terminal.
+    fn draw_terminal_icon(&self, window: &mut Window, x: u32, y: u32, size: u32) {
+        // Fundo preto
+        window.fill_rect(x, y, size, size, colors::BLACK);
 
-        // Borda da janela
-        window.fill_rect(x, y, size, border_width, colors::WHITE); // Top
-        window.fill_rect(x, y, border_width, size, colors::WHITE); // Left
+        // Borda branca
+        window.fill_rect(x, y, size, 2, colors::WHITE);
+        window.fill_rect(x, y, 2, size, colors::WHITE);
+        window.fill_rect(x + size - 2, y, 2, size, colors::WHITE);
+        window.fill_rect(x, y + size - 2, size, 2, colors::WHITE);
+
+        // Prompt ">" simplificado
+        let prompt_x = x + 4;
+        let prompt_y = y + size / 2 - 2;
+        window.fill_rect(prompt_x, prompt_y, 4, 4, colors::GREEN);
+        window.fill_rect(prompt_x + 6, prompt_y + 1, 8, 2, colors::GREEN);
+    }
+
+    /// Desenha a área de system tray (canto direito).
+    fn draw_system_tray(&self, window: &mut Window) {
+        let tray_x = self.width - SYSTEM_TRAY_WIDTH - PADDING;
+        let tray_y = self.y + PADDING;
+        let tray_h = self.height - (PADDING * 2);
+
+        // Separador vertical
         window.fill_rect(
-            x + size - border_width,
-            y,
-            border_width,
-            size,
-            colors::WHITE,
-        ); // Right
+            tray_x - 4,
+            tray_y + 4,
+            1,
+            tray_h - 8,
+            colors::TASKBAR_BORDER,
+        );
+
+        // Ícone de rede (Wi-Fi simplificado)
+        self.draw_network_icon(window, tray_x, tray_y + (tray_h - 16) / 2);
+
+        // Ícone de som
+        self.draw_sound_icon(window, tray_x + 24, tray_y + (tray_h - 16) / 2);
+
+        // Relógio
+        self.draw_clock(window, tray_x + 52, tray_y, tray_h);
+    }
+
+    /// Desenha ícone de rede (Wi-Fi).
+    fn draw_network_icon(&self, window: &mut Window, x: u32, y: u32) {
+        // Arcos de Wi-Fi (simplificado como barras)
+        window.fill_rect(x + 6, y + 12, 4, 4, colors::WHITE);
+        window.fill_rect(x + 4, y + 8, 8, 2, colors::WHITE);
+        window.fill_rect(x + 2, y + 4, 12, 2, colors::WHITE);
+        window.fill_rect(x, y, 16, 2, colors::WHITE);
+    }
+
+    /// Desenha ícone de som.
+    fn draw_sound_icon(&self, window: &mut Window, x: u32, y: u32) {
+        // Alto-falante simplificado
+        window.fill_rect(x + 2, y + 5, 4, 6, colors::WHITE);
+        window.fill_rect(x + 6, y + 3, 2, 10, colors::WHITE);
+
+        // Ondas de som
+        window.fill_rect(x + 10, y + 4, 2, 8, colors::TEXT_SECONDARY);
+        window.fill_rect(x + 14, y + 2, 2, 12, colors::TEXT_SECONDARY);
+    }
+
+    /// Desenha o relógio.
+    fn draw_clock(&self, window: &mut Window, x: u32, y: u32, h: u32) {
+        // Fundo do relógio
+        let clock_y = y + (h - 16) / 2;
+
+        // Desenhar "12:00" como pixels simplificados
+        // "1"
+        window.fill_rect(x, clock_y + 2, 2, 12, colors::WHITE);
+
+        // "2"
+        window.fill_rect(x + 6, clock_y, 6, 2, colors::WHITE);
+        window.fill_rect(x + 10, clock_y + 2, 2, 4, colors::WHITE);
+        window.fill_rect(x + 6, clock_y + 6, 6, 2, colors::WHITE);
+        window.fill_rect(x + 6, clock_y + 8, 2, 4, colors::WHITE);
+        window.fill_rect(x + 6, clock_y + 12, 6, 2, colors::WHITE);
+
+        // ":"
+        window.fill_rect(x + 16, clock_y + 3, 2, 2, colors::WHITE);
+        window.fill_rect(x + 16, clock_y + 9, 2, 2, colors::WHITE);
+
+        // "0" (primeiro)
+        window.fill_rect(x + 22, clock_y, 6, 2, colors::WHITE);
+        window.fill_rect(x + 22, clock_y, 2, 14, colors::WHITE);
+        window.fill_rect(x + 26, clock_y, 2, 14, colors::WHITE);
+        window.fill_rect(x + 22, clock_y + 12, 6, 2, colors::WHITE);
+
+        // "0" (segundo)
+        window.fill_rect(x + 32, clock_y, 6, 2, colors::WHITE);
+        window.fill_rect(x + 32, clock_y, 2, 14, colors::WHITE);
+        window.fill_rect(x + 36, clock_y, 2, 14, colors::WHITE);
+        window.fill_rect(x + 32, clock_y + 12, 6, 2, colors::WHITE);
+    }
+
+    /// Desenha o menu iniciar.
+    fn draw_start_menu(&self, window: &mut Window) {
+        let menu_width: u32 = 250;
+        let menu_height: u32 = 300;
+        let menu_x = self.x + PADDING;
+        let menu_y = self.y - menu_height - 4;
+
+        // Fundo do menu
+        window.fill_rect(menu_x, menu_y, menu_width, menu_height, colors::MENU_BG);
+
+        // Borda
+        window.fill_rect(menu_x, menu_y, menu_width, 1, colors::TASKBAR_BORDER);
+        window.fill_rect(menu_x, menu_y, 1, menu_height, colors::TASKBAR_BORDER);
         window.fill_rect(
-            x,
-            y + size - border_width,
-            size,
-            border_width,
-            colors::WHITE,
-        ); // Bottom
+            menu_x + menu_width - 1,
+            menu_y,
+            1,
+            menu_height,
+            colors::TASKBAR_BORDER,
+        );
+        window.fill_rect(
+            menu_x,
+            menu_y + menu_height - 1,
+            menu_width,
+            1,
+            colors::TASKBAR_BORDER,
+        );
+
+        // Título "RedstoneOS"
+        self.draw_menu_title(window, menu_x + 16, menu_y + 16);
+
+        // Separador
+        window.fill_rect(
+            menu_x + 16,
+            menu_y + 50,
+            menu_width - 32,
+            1,
+            colors::TASKBAR_BORDER,
+        );
+
+        // Item: Terminal
+        self.draw_menu_item(window, menu_x + 16, menu_y + 60, "Terminal", true);
+
+        // Item: Settings (desabilitado)
+        self.draw_menu_item(window, menu_x + 16, menu_y + 100, "Configuracoes", false);
+
+        // Item: Sobre
+        self.draw_menu_item(window, menu_x + 16, menu_y + 140, "Sobre", false);
+    }
+
+    /// Desenha título do menu.
+    fn draw_menu_title(&self, window: &mut Window, x: u32, y: u32) {
+        // "R" simplificado (logo)
+        window.fill_rect(x, y, 4, 20, colors::ACCENT);
+        window.fill_rect(x, y, 12, 4, colors::ACCENT);
+        window.fill_rect(x + 8, y + 4, 4, 6, colors::ACCENT);
+        window.fill_rect(x, y + 8, 12, 4, colors::ACCENT);
+        window.fill_rect(x + 8, y + 12, 4, 8, colors::ACCENT);
+    }
+
+    /// Desenha item do menu.
+    fn draw_menu_item(&self, window: &mut Window, x: u32, y: u32, _label: &str, enabled: bool) {
+        let item_height: u32 = 32;
+        let item_width: u32 = 218;
+
+        let bg_color = if enabled {
+            colors::MENU_ITEM_HOVER
+        } else {
+            colors::MENU_BG
+        };
+
+        let text_color = if enabled {
+            colors::WHITE
+        } else {
+            colors::TEXT_DISABLED
+        };
+
+        // Fundo do item
+        window.fill_rect(x, y, item_width, item_height, bg_color);
+
+        // Ícone placeholder (quadrado)
+        window.fill_rect(x + 8, y + 8, 16, 16, text_color);
+
+        // Texto seria desenhado aqui com fonte (simplificado por enquanto)
+        // Por ora, uma linha para indicar texto
+        window.fill_rect(x + 32, y + 14, 80, 4, text_color);
+    }
+
+    /// Alterna estado do menu iniciar.
+    pub fn toggle_start_menu(&mut self) {
+        self.start_menu_open = !self.start_menu_open;
     }
 
     /// Retorna a área de trabalho disponível (excluindo a taskbar).
