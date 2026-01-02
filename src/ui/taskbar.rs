@@ -344,4 +344,27 @@ impl Taskbar {
     pub fn get_work_area(&self, screen_width: u32) -> (u32, u32, u32, u32) {
         (0, 0, screen_width, self.y)
     }
+
+    /// Processa um clique do mouse na posição (x, y).
+    /// Retorna true se o clique foi processado.
+    pub fn handle_click(&mut self, click_x: i32, click_y: i32) -> bool {
+        // Verificar se o clique está dentro da taskbar
+        if click_y < self.y as i32 || click_y >= (self.y + self.height) as i32 {
+            return false;
+        }
+
+        // Área do botão iniciar
+        let start_btn_x = self.x + PADDING;
+        let start_btn_right = start_btn_x + START_BUTTON_WIDTH;
+
+        if click_x >= start_btn_x as i32 && click_x < start_btn_right as i32 {
+            // Clique no botão iniciar
+            redpowder::println!("[Shell] Clique no botao iniciar!");
+            self.start_menu_open = !self.start_menu_open;
+            return true;
+        }
+
+        // Clique em outra área da taskbar
+        false
+    }
 }

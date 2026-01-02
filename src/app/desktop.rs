@@ -129,6 +129,21 @@ impl Desktop {
                     );
                     self.dirty = true;
                 }
+                redpowder::event::Event::Input(input) => {
+                    // Processar eventos de mouse
+                    if input.event_type == redpowder::event::event_type::MOUSE_DOWN {
+                        // Extrair coordenadas
+                        let click_x = input.param1 as i32;
+                        let click_y = (input.param2 >> 16) as i32;
+
+                        println!("[Shell] Click at ({}, {})", click_x, click_y);
+
+                        // Processar clique na taskbar
+                        if self.taskbar.handle_click(click_x, click_y) {
+                            self.dirty = true; // Redesenhar se algo mudou
+                        }
+                    }
+                }
                 _ => {}
             }
         }
