@@ -1,7 +1,11 @@
-//! # App Module - Aplicação Principal
+//! # App Module
 //!
-//! Lógica do desktop environment.
+//! Módulos de aplicativos do Shell.
 
-pub mod desktop;
+mod desktop;
+mod discovery;
+mod launcher;
 
 pub use desktop::Desktop;
+pub use discovery::{discover_apps, AppCategory, AppIcon, AppInfo};
+pub use launcher::launch_app;

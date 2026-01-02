@@ -2,13 +2,14 @@
 //!
 //! Gerencia o ambiente de desktop do Shell.
 //!
-//! ## Responsabilidades
+//! ## v0.2.0 Melhorias
 //!
-//! - Gerenciar janela principal do desktop
-//! - Coordenar componentes visuais (wallpaper, taskbar)
-//! - Processar eventos de entrada
-//! - Loop principal de renderização
+//! - Menu iniciar lista apps de /apps/
+//! - Clique no menu lança aplicativos
+//! - Taskbar mostra janelas abertas
+//! - Relógio mostra uptime real
 
+use crate::app::{discover_apps, launch_app, AppInfo};
 use crate::ui::taskbar::TaskbarAction;
 use crate::ui::{Taskbar, Wallpaper};
 use alloc::string::ToString;
@@ -23,9 +24,6 @@ use redpowder::window::{
 // CONSTANTES
 // ============================================================================
 
-/// Intervalo de idle entre frames (ms) - reservado para uso futuro
-#[allow(dead_code)]
-const IDLE_INTERVAL_MS: u64 = 16;
 const LISTENER_PORT_NAME: &str = "shell.taskbar";
 
 // ============================================================================
@@ -33,51 +31,76 @@ const LISTENER_PORT_NAME: &str = "shell.taskbar";
 // ============================================================================
 
 pub struct Desktop {
-    /// Janela principal do desktop (Wallpaper + Taskbar)
+    /// Janela principal do desktop
     window: Window,
-    /// Porta para receber eventos globais (lifecycle)
+    /// Porta para eventos de lifecycle
     listener_port: Port,
-    /// Janela do menu iniciar (aberta sob demanda)
+    /// Janela do menu iniciar
     menu_window: Option<Window>,
     /// Componente de wallpaper
     wallpaper: Wallpaper,
     /// Componente de taskbar
     taskbar: Taskbar,
-    /// Flag de dirty (precisa redesenhar)
+    /// Apps descobertos
+    available_apps: Vec<AppInfo>,
+    /// Flag de dirty
     dirty: bool,
+    /// Contador de frames para atualização do relógio
+    frame_counter: u32,
 }
 
 impl Desktop {
     /// Cria e inicializa o desktop.
     pub fn new() -> SysResult<Self> {
-        println!("[Shell] Iniciando...");
+        println!("[Shell] Iniciando v0.2.0...");
 
-        // Obter resolução via framebuffer
+        // Obter resolução
         let fb_info = redpowder::graphics::get_framebuffer_info()?;
         let screen_width = fb_info.width;
         let screen_height = fb_info.height;
 
-        println!(
-            "[Shell] Resolução da tela: {}x{}",
-            screen_width, screen_height
-        );
+        println!("[Shell] Resolução: {}x{}", screen_width, screen_height);
 
-        // Criar janela única com flag 0x08 (FULLSCREEN/Background)
+        // Criar janela fullscreen
         let window = Window::create_with_flags(0, 0, screen_width, screen_height, 0x08, "Shell")?;
-
-        println!("[Shell] Desktop inicializado com sucesso!");
+        println!("[Shell] Desktop window criada");
 
         // Criar componentes
-        let taskbar = Taskbar::new(screen_width, screen_height);
+        let mut taskbar = Taskbar::new(screen_width, screen_height);
         let wallpaper = Wallpaper::with_bounds(0, 0, screen_width, screen_height);
 
-        // Criar porta listener para eventos
+        // Descobrir apps disponíveis
+        println!("[Shell] Descobrindo apps...");
+        let available_apps = discover_apps();
+        println!("[Shell] {} apps encontrados", available_apps.len());
+        for app in &available_apps {
+            println!("[Shell]   - {} ({})", app.name, app.path);
+        }
+
+        // Passar apps para taskbar
+        taskbar.set_available_apps(available_apps.clone());
+
+        // Criar porta listener
         let listener_port = Port::create(LISTENER_PORT_NAME, 4096)?;
-        println!("[Shell] Listener port criada: '{}'", LISTENER_PORT_NAME);
+        println!("[Shell] Listener port criada");
 
         // Registrar como taskbar no compositor
-        // Usamos uma porta temporária para enviar ao compositor
-        // TODO: encapsular isso melhor se possível
+        Self::register_with_compositor();
+
+        Ok(Self {
+            window,
+            listener_port,
+            menu_window: None,
+            wallpaper,
+            taskbar,
+            available_apps,
+            dirty: true,
+            frame_counter: 0,
+        })
+    }
+
+    /// Registra o shell como taskbar no compositor
+    fn register_with_compositor() {
         match Port::connect(COMPOSITOR_PORT) {
             Ok(compositor) => {
                 let mut port_name_buf = [0u8; 32];
@@ -98,128 +121,139 @@ impl Desktop {
                 };
 
                 let _ = compositor.send(req_bytes, 0);
-                println!("[Shell] Solicitacao de registro enviada");
+                println!("[Shell] Registrado como taskbar");
             }
-            Err(e) => println!("[Shell] Erro ao conectar compositor: {:?}", e),
+            Err(e) => println!("[Shell] Erro ao registrar: {:?}", e),
         }
-
-        Ok(Self {
-            window,
-            listener_port,
-            menu_window: None,
-            wallpaper,
-            taskbar,
-            dirty: true,
-        })
     }
 
-    /// Cria janela com retry para aguardar compositor.
-    fn create_window_with_retry(width: u32, height: u32) -> SysResult<Window> {
-        const MAX_RETRIES: u32 = 10;
-        const RETRY_DELAY_MS: u64 = 100;
-
-        for attempt in 1..=MAX_RETRIES {
-            // API: Window::create(x, y, width, height)
-            match Window::create(0, 0, width, height, "Shell (Retry)") {
-                Ok(w) => {
-                    println!("[Shell] Conectado ao compositor (tentativa {})", attempt);
-                    return Ok(w);
-                }
-                Err(_) if attempt < MAX_RETRIES => {
-                    let _ = redpowder::time::sleep(RETRY_DELAY_MS);
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Err(redpowder::syscall::SysError::NotFound)
-    }
-
-    /// Executa o loop principal do shell.
+    /// Executa o loop principal
     pub fn run(&mut self) -> ! {
-        println!("[Shell] Iniciando Desktop Environment...");
+        println!("[Shell] Desktop Environment iniciado!");
 
         // Renderização inicial
         self.redraw();
 
-        println!("[Shell] Desktop pronto!");
+        println!("[Shell] Pronto!");
+        println!("[Shell] Entrando no loop principal...");
 
-        // Loop de eventos
+        let mut last_heartbeat = 0u64;
+        let mut loop_count = 0u64;
+
         loop {
-            // Processar eventos da janela
+            loop_count += 1;
+
+            // Log na primeira iteração
+            if loop_count == 1 {
+                println!("[Shell] Loop: primeira iteração");
+            }
+
+            // Heartbeat a cada ~60 iterações (~1 segundo)
+            if loop_count % 60 == 0 {
+                let uptime_secs = redpowder::time::clock().unwrap_or(0) / 1000;
+                if uptime_secs != last_heartbeat {
+                    last_heartbeat = uptime_secs;
+                    println!(
+                        "[Shell] Heartbeat: uptime={}s, loops={}",
+                        uptime_secs, loop_count
+                    );
+
+                    // Forçar atualização do relógio
+                    self.taskbar.update_uptime();
+                    self.dirty = true;
+                }
+            }
+
+            // Log antes de process_events na primeira iteração
+            if loop_count == 1 {
+                println!("[Shell] Loop: chamando process_events()");
+            }
+
+            // Processar eventos
             self.process_events();
+
+            if loop_count == 1 {
+                println!("[Shell] Loop: process_events() retornou");
+            }
+
+            // Incrementar frame counter
+            self.frame_counter += 1;
+
+            // Atualizar relógio a cada ~30 frames (~500ms)
+            if self.frame_counter >= 30 {
+                self.frame_counter = 0;
+                self.taskbar.update_uptime();
+                self.dirty = true; // Forçar redraw para atualizar relógio
+            }
 
             // Redesenhar se necessário
             if self.dirty {
+                if loop_count == 1 {
+                    println!("[Shell] Loop: chamando redraw()");
+                }
                 self.redraw();
                 self.dirty = false;
+                if loop_count == 1 {
+                    println!("[Shell] Loop: redraw() retornou");
+                }
             }
 
-            // Sleep para não consumir 100% CPU
-            let _ = redpowder::time::sleep(50);
+            if loop_count == 1 {
+                println!("[Shell] Loop: chamando sleep(16)");
+            }
+
+            // Throttle - sleep 16ms (~60fps)
+            let _ = redpowder::time::sleep(16);
+
+            if loop_count == 1 {
+                println!("[Shell] Loop: sleep() retornou, fim da primeira iteração");
+            }
         }
     }
 
-    /// Processa eventos pendentes da janela.
+    /// Processa eventos pendentes
     fn process_events(&mut self) {
-        // 1. Processar eventos da janela principal
-        let mut toggle_requested = false;
-        let mut close_requested = false;
+        let mut toggle_menu = false;
+        let mut close_menu = false;
+        let mut launch_app_index: Option<usize> = None;
 
+        // DEBUG: Log antes de poll_events
+        if self.frame_counter == 0 {
+            println!("[Shell] process_events: antes de poll_events()");
+        }
+
+        // 1. Eventos da janela principal
+        let mut event_count = 0;
         for event in self.window.poll_events() {
+            event_count += 1;
+            if event_count == 1 && self.frame_counter == 0 {
+                println!("[Shell] process_events: primeiro evento recebido");
+            }
             match event {
                 redpowder::event::Event::Input(input) => {
+                    println!("[Shell] Input event: type={}", input.event_type);
                     if input.event_type == redpowder::event::event_type::MOUSE_DOWN {
-                        let click_x = input.param1 as i32;
-                        let click_y = (input.param2 >> 16) as i32;
+                        let x = input.param1 as i32;
+                        let y = (input.param2 >> 16) as i32;
+                        println!("[Shell] Mouse click at ({}, {})", x, y);
 
-                        // Se clicar na taskbar (parte inferior)
-                        match self.taskbar.handle_click(click_x, click_y) {
+                        match self.taskbar.handle_click(x, y) {
                             TaskbarAction::ToggleStartMenu => {
-                                toggle_requested = true;
+                                println!("[Shell] Action: ToggleStartMenu");
+                                toggle_menu = true;
                             }
                             TaskbarAction::ToggleWindow(id) => {
-                                // Enviar comando de Toggle para a janela
-                                println!("[Shell] Toggle Window {}", id);
-
-                                // Determinar estado atual e inverter
-                                let is_minimized =
-                                    self.taskbar.get_window_state(id).unwrap_or(false);
-
-                                // Precisamos enviar MINIMIZE ou RESTORE.
-                                // Usamos uma porta temporária para o Compositor.
-                                // Idealmente a struct Window teria helper static
-                                if let Ok(compositor) = Port::connect(COMPOSITOR_PORT) {
-                                    let op = if is_minimized {
-                                        opcodes::RESTORE_WINDOW
-                                    } else {
-                                        opcodes::MINIMIZE_WINDOW
-                                    };
-
-                                    // Reusando struct de DestroyWindow que tem apenas window_id
-                                    // Ou criando a request na mão. Minimize/Restore usam protocol simples?
-                                    // Compositor: handle_minimize_window usa o proprio ID ou struct?
-                                    // Compositor check: if data.len() < sizeof(DestroyWindowRequest)
-                                    // DestroyWindowRequest tem window_id. Vamos reusar.
-                                    let req = redpowder::window::DestroyWindowRequest {
-                                        op,
-                                        window_id: id,
-                                    };
-                                    let bytes = unsafe {
-                                        core::slice::from_raw_parts(
-                                            &req as *const _ as *const u8,
-                                            core::mem::size_of::<
-                                                redpowder::window::DestroyWindowRequest,
-                                            >(),
-                                        )
-                                    };
-                                    let _ = compositor.send(bytes, 0);
-                                }
+                                println!("[Shell] Action: ToggleWindow({})", id);
+                                self.toggle_window(id);
+                            }
+                            TaskbarAction::LaunchApp(idx) => {
+                                println!("[Shell] Action: LaunchApp({})", idx);
+                                launch_app_index = Some(idx);
                             }
                             TaskbarAction::None => {
-                                // Se clicar fora do menu, fechar o menu se estiver aberto
-                                if self.taskbar.start_menu_open {
-                                    close_requested = true;
+                                // Clique fora? Fechar menu
+                                if self.taskbar.start_menu_open && y < self.taskbar.y as i32 {
+                                    close_menu = true;
                                 }
                             }
                         }
@@ -229,96 +263,175 @@ impl Desktop {
             }
         }
 
-        // 2. Processar eventos de Lifecycle (listener port)
-        let mut msg_buf = [0u8; 256];
-        while let Ok(n) = self.listener_port.recv(&mut msg_buf, 0) {
-            if n >= core::mem::size_of::<WindowLifecycleEvent>() {
-                let evt = unsafe { &*(msg_buf.as_ptr() as *const WindowLifecycleEvent) };
-                if evt.op == opcodes::EVENT_WINDOW_LIFECYCLE {
-                    let title_len = evt
-                        .title
-                        .iter()
-                        .position(|&c| c == 0)
-                        .unwrap_or(evt.title.len());
-                    let title = core::str::from_utf8(&evt.title[..title_len])
-                        .unwrap_or("?")
-                        .to_string();
+        // DEBUG: Log após poll_events
+        if self.frame_counter == 0 {
+            println!(
+                "[Shell] process_events: após poll_events(), {} eventos",
+                event_count
+            );
+        }
 
-                    match evt.event_type {
-                        redpowder::window::lifecycle_events::CREATED => {
-                            self.taskbar.add_window(evt.window_id, title)
+        // 2. Eventos da porta de lifecycle
+        let mut msg_buf = [0u8; 256];
+        loop {
+            match self.listener_port.recv(&mut msg_buf, 0) {
+                Ok(n) if n > 0 => {
+                    if n >= core::mem::size_of::<WindowLifecycleEvent>() {
+                        let evt = unsafe { &*(msg_buf.as_ptr() as *const WindowLifecycleEvent) };
+                        if evt.op == opcodes::EVENT_WINDOW_LIFECYCLE {
+                            self.handle_lifecycle_event(evt);
                         }
-                        redpowder::window::lifecycle_events::DESTROYED => {
-                            self.taskbar.remove_window(evt.window_id)
-                        }
-                        redpowder::window::lifecycle_events::MINIMIZED => {
-                            self.taskbar.set_window_minimized(evt.window_id, true)
-                        }
-                        redpowder::window::lifecycle_events::RESTORED => {
-                            self.taskbar.set_window_minimized(evt.window_id, false)
-                        }
-                        _ => {}
                     }
-                    self.dirty = true;
+                }
+                _ => break, // n == 0 ou Err -> sair do loop
+            }
+        }
+
+        // 3. Eventos do menu (se aberto)
+        if let Some(ref mut menu_win) = self.menu_window {
+            for event in menu_win.poll_events() {
+                match event {
+                    redpowder::event::Event::Input(input) => {
+                        if input.event_type == redpowder::event::event_type::MOUSE_DOWN {
+                            let x = input.param1 as i32;
+                            let y = (input.param2 >> 16) as i32;
+
+                            match self.taskbar.handle_menu_click(x, y, menu_win.height) {
+                                TaskbarAction::LaunchApp(idx) => {
+                                    launch_app_index = Some(idx);
+                                    close_menu = true;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
 
-        if toggle_requested {
+        // Aplicar ações
+        if toggle_menu {
             self.dirty = true;
             self.update_menu_state();
-        } else if close_requested {
+        } else if close_menu {
             self.taskbar.start_menu_open = false;
             self.update_menu_state();
             self.dirty = true;
         }
 
-        // 2. Processar eventos da janela do menu (se existir)
-        if let Some(ref mut menu_win) = self.menu_window {
-            for _ in menu_win.poll_events() {}
+        // Lançar app se solicitado
+        if let Some(idx) = launch_app_index {
+            self.launch_app_by_index(idx);
         }
     }
 
-    /// Sincroniza a janela do menu com o estado do componente Taskbar.
+    /// Trata eventos de lifecycle de janela
+    fn handle_lifecycle_event(&mut self, evt: &WindowLifecycleEvent) {
+        let title_len = evt
+            .title
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(evt.title.len());
+        let title = core::str::from_utf8(&evt.title[..title_len])
+            .unwrap_or("?")
+            .to_string();
+
+        match evt.event_type {
+            redpowder::window::lifecycle_events::CREATED => {
+                println!("[Shell] Janela criada: {} (ID {})", title, evt.window_id);
+                self.taskbar.add_window(evt.window_id, title);
+            }
+            redpowder::window::lifecycle_events::DESTROYED => {
+                println!("[Shell] Janela destruída: ID {}", evt.window_id);
+                self.taskbar.remove_window(evt.window_id);
+            }
+            redpowder::window::lifecycle_events::MINIMIZED => {
+                self.taskbar.set_window_minimized(evt.window_id, true);
+            }
+            redpowder::window::lifecycle_events::RESTORED => {
+                self.taskbar.set_window_minimized(evt.window_id, false);
+            }
+            _ => {}
+        }
+        self.dirty = true;
+    }
+
+    /// Toggle minimizar/restaurar janela
+    fn toggle_window(&self, id: u32) {
+        let is_minimized = self.taskbar.get_window_state(id).unwrap_or(false);
+
+        if let Ok(compositor) = Port::connect(COMPOSITOR_PORT) {
+            let op = if is_minimized {
+                opcodes::RESTORE_WINDOW
+            } else {
+                opcodes::MINIMIZE_WINDOW
+            };
+
+            let req = redpowder::window::DestroyWindowRequest { op, window_id: id };
+
+            let bytes = unsafe {
+                core::slice::from_raw_parts(
+                    &req as *const _ as *const u8,
+                    core::mem::size_of::<redpowder::window::DestroyWindowRequest>(),
+                )
+            };
+            let _ = compositor.send(bytes, 0);
+        }
+    }
+
+    /// Lança um app pelo índice
+    fn launch_app_by_index(&mut self, idx: usize) {
+        if let Some(app) = self.available_apps.get(idx) {
+            println!("[Shell] Lançando app: {}", app.name);
+            let path = app.path.clone();
+            let _ = launch_app(&path);
+        }
+    }
+
+    /// Atualiza estado da janela do menu
     fn update_menu_state(&mut self) {
         if self.taskbar.start_menu_open && self.menu_window.is_none() {
-            // Abrir janela de menu (Overlay layer = 0x01 BORDERLESS ou flag específica)
-            // No nosso compositor, 0x01 mapeia para Panel/Overlay
-            let menu_h: u32 = 300;
-            let menu_w: u32 = 200;
+            // Abrir menu
+            let menu_h: u32 = 320;
+            let menu_w: u32 = 220;
             let screen_h = self.window.height;
 
-            println!("[Shell] Abrindo janela de menu...");
+            println!("[Shell] Abrindo menu iniciar...");
             match Window::create_with_flags(
-                0u32,
-                (screen_h - 40 - menu_h) as u32,
+                0,
+                screen_h - 40 - menu_h,
                 menu_w,
                 menu_h,
-                0x01u32,
+                0x01, // Overlay
                 "Start Menu",
             ) {
                 Ok(w) => self.menu_window = Some(w),
-                Err(e) => println!("[Shell] Erro ao criar janela de menu: {:?}", e),
+                Err(e) => println!("[Shell] Erro ao criar menu: {:?}", e),
             }
         } else if !self.taskbar.start_menu_open && self.menu_window.is_some() {
-            // Fechar janela de menu
-            println!("[Shell] Fechando janela de menu.");
-            self.menu_window = None; // O drop da Window deve enviar DESTROY_WINDOW no futuro ou tratamos manual
-                                     // Por enquanto, o compositor remove janelas órfãs ou tratamos via IPC se necessário
+            // Fechar menu
+            println!("[Shell] Fechando menu iniciar");
+            if let Some(menu) = self.menu_window.take() {
+                let _ = menu.destroy();
+            }
         }
     }
 
-    /// Redesenha todo o desktop.
+    /// Redesenha o desktop
     fn redraw(&mut self) {
-        // 1. Desenhar fundo e barra na janela principal
+        // Desenhar wallpaper e taskbar na janela principal
         self.wallpaper.draw(&mut self.window);
         self.taskbar.draw(&mut self.window);
         let _ = self.window.present();
 
-        // 2. Desenhar menu na janela dedicada (se aberta)
+        // Desenhar conteúdo do menu
         if let Some(ref mut menu_win) = self.menu_window {
             self.taskbar.draw_menu_content(menu_win);
             let _ = menu_win.present();
         }
     }
 }
+
+// Uso do Vec
+use alloc::vec::Vec;

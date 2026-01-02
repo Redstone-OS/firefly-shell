@@ -28,6 +28,9 @@ pub const TASKBAR_BORDER: u32 = 0xFF3C3C50;
 /// Cor do botão iniciar
 pub const START_BUTTON_BG: u32 = 0xFF4682B4;
 
+/// Cor do botão iniciar quando ativo/pressionado
+pub const START_BUTTON_ACTIVE: u32 = 0xFF5A92C4;
+
 /// Cor do botão de app ativo
 pub const APP_BUTTON_ACTIVE: u32 = 0xFF3A3A4C;
 
