@@ -9,6 +9,9 @@
 //! - System Tray + Relógio (canto direito)
 
 use crate::theme::colors;
+use alloc::string::String;
+use alloc::vec::Vec;
+use redpowder::println;
 use redpowder::window::Window;
 
 // ============================================================================
@@ -37,6 +40,18 @@ const SYSTEM_TRAY_WIDTH: u32 = 120;
 // TASKBAR
 // ============================================================================
 
+pub enum TaskbarAction {
+    None,
+    ToggleStartMenu,
+    ToggleWindow(u32), // Minimizar/Restaurar
+}
+
+struct WindowEntry {
+    id: u32,
+    title: String,
+    minimized: bool,
+}
+
 /// Componente da barra de tarefas.
 pub struct Taskbar {
     /// Posição X
@@ -49,6 +64,8 @@ pub struct Taskbar {
     pub height: u32,
     /// Menu iniciar aberto
     pub start_menu_open: bool,
+    /// Janelas abertas
+    entries: Vec<WindowEntry>,
 }
 
 impl Taskbar {
@@ -60,7 +77,36 @@ impl Taskbar {
             width: screen_width,
             height: HEIGHT,
             start_menu_open: false,
+            entries: Vec::new(),
         }
+    }
+
+    pub fn add_window(&mut self, id: u32, title: String) {
+        // Evitar duplicatas
+        if !self.entries.iter().any(|e| e.id == id) {
+            self.entries.push(WindowEntry {
+                id,
+                title,
+                minimized: false,
+            });
+        }
+    }
+
+    pub fn remove_window(&mut self, id: u32) {
+        self.entries.retain(|e| e.id != id);
+    }
+
+    pub fn set_window_minimized(&mut self, id: u32, minimized: bool) {
+        if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {
+            entry.minimized = minimized;
+        }
+    }
+
+    pub fn get_window_state(&self, id: u32) -> Option<bool> {
+        self.entries
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| e.minimized)
     }
 
     /// Retorna a posição Y da taskbar.
@@ -80,8 +126,10 @@ impl Taskbar {
         // Botão Iniciar
         self.draw_start_button(window);
 
-        // Área de apps (placeholder com 1 app)
-        self.draw_app_button(window, 0);
+        // Área de apps
+        for (i, entry) in self.entries.iter().enumerate() {
+            self.draw_app_button(window, i as u32, entry);
+        }
 
         // System Tray (canto direito)
         self.draw_system_tray(window);
@@ -128,20 +176,36 @@ impl Taskbar {
     }
 
     /// Desenha um botão de aplicação na taskbar.
-    fn draw_app_button(&self, window: &mut Window, index: u32) {
+    fn draw_app_button(&self, window: &mut Window, index: u32, entry: &WindowEntry) {
         let start_x = self.x + START_BUTTON_WIDTH + 12;
         let btn_x = start_x + (index * (APP_ICON_SIZE + ICON_MARGIN + 8));
         let btn_y = self.y + PADDING;
         let btn_h = self.height - (PADDING * 2);
         let btn_w = APP_ICON_SIZE + 8;
 
-        // Fundo do botão
-        window.fill_rect(btn_x, btn_y, btn_w, btn_h, colors::APP_BUTTON_ACTIVE);
+        // Fundo do botão (alterar se minimizado)
+        let bg_color = if entry.minimized {
+            colors::TASKBAR_BG // Transparente/Escuro se minimizado
+        } else {
+            colors::APP_BUTTON_ACTIVE // Destacado se ativo
+        };
+        window.fill_rect(btn_x, btn_y, btn_w, btn_h, bg_color);
 
         // Indicador de ativo (linha inferior colorida)
-        window.fill_rect(btn_x + 4, btn_y + btn_h - 3, btn_w - 8, 2, colors::ACCENT);
+        if !entry.minimized {
+            window.fill_rect(btn_x + 4, btn_y + btn_h - 3, btn_w - 8, 2, colors::ACCENT);
+        } else {
+            // Indicador discreto para minimizado
+            window.fill_rect(
+                btn_x + 8,
+                btn_y + btn_h - 2,
+                btn_w - 16,
+                1,
+                colors::TEXT_SECONDARY,
+            );
+        }
 
-        // Ícone placeholder (terminal)
+        // Ícone placeholder (terminal) - TODO: Usar título para decidir ícone
         self.draw_terminal_icon(window, btn_x + 4, btn_y + 4, btn_h - 8);
     }
 
@@ -241,56 +305,6 @@ impl Taskbar {
         window.fill_rect(x + 32, clock_y + 12, 6, 2, colors::WHITE);
     }
 
-    /// Desenha o menu iniciar.
-    fn draw_start_menu(&self, window: &mut Window) {
-        let menu_width: u32 = 250;
-        let menu_height: u32 = 300;
-        let menu_x = self.x + PADDING;
-        let menu_y = self.y - menu_height - 4;
-
-        // Fundo do menu
-        window.fill_rect(menu_x, menu_y, menu_width, menu_height, colors::MENU_BG);
-
-        // Borda
-        window.fill_rect(menu_x, menu_y, menu_width, 1, colors::TASKBAR_BORDER);
-        window.fill_rect(menu_x, menu_y, 1, menu_height, colors::TASKBAR_BORDER);
-        window.fill_rect(
-            menu_x + menu_width - 1,
-            menu_y,
-            1,
-            menu_height,
-            colors::TASKBAR_BORDER,
-        );
-        window.fill_rect(
-            menu_x,
-            menu_y + menu_height - 1,
-            menu_width,
-            1,
-            colors::TASKBAR_BORDER,
-        );
-
-        // Título "RedstoneOS"
-        self.draw_menu_title(window, menu_x + 16, menu_y + 16);
-
-        // Separador
-        window.fill_rect(
-            menu_x + 16,
-            menu_y + 50,
-            menu_width - 32,
-            1,
-            colors::TASKBAR_BORDER,
-        );
-
-        // Item: Terminal
-        self.draw_menu_item(window, menu_x + 16, menu_y + 60, "Terminal", true);
-
-        // Item: Settings (desabilitado)
-        self.draw_menu_item(window, menu_x + 16, menu_y + 100, "Configuracoes", false);
-
-        // Item: Sobre
-        self.draw_menu_item(window, menu_x + 16, menu_y + 140, "Sobre", false);
-    }
-
     /// Desenha título do menu.
     fn draw_menu_title(&self, window: &mut Window, x: u32, y: u32) {
         // "R" simplificado (logo)
@@ -341,11 +355,11 @@ impl Taskbar {
     }
 
     /// Processa um clique do mouse na posição (x, y).
-    /// Retorna true se o clique foi processado.
-    pub fn handle_click(&mut self, click_x: i32, click_y: i32) -> bool {
+    /// Retorna a ação a ser realizada.
+    pub fn handle_click(&mut self, click_x: i32, click_y: i32) -> TaskbarAction {
         // Verificar se o clique está dentro da taskbar
         if click_y < self.y as i32 || click_y >= (self.y + self.height) as i32 {
-            return false;
+            return TaskbarAction::None;
         }
 
         // Área do botão iniciar
@@ -356,11 +370,24 @@ impl Taskbar {
             // Clique no botão iniciar
             redpowder::println!("[Shell] Clique no botao iniciar!");
             self.start_menu_open = !self.start_menu_open;
-            return true;
+            return TaskbarAction::ToggleStartMenu;
+        }
+
+        // Verificar cliques nos apps
+        let start_x = self.x + START_BUTTON_WIDTH + 12;
+        let btn_w = APP_ICON_SIZE + 8;
+        let btn_gap = APP_ICON_SIZE + ICON_MARGIN + 8;
+
+        for (i, entry) in self.entries.iter().enumerate() {
+            let btn_x = start_x + (i as u32 * btn_gap);
+            if click_x >= btn_x as i32 && click_x < (btn_x + btn_w) as i32 {
+                redpowder::println!("[Shell] Clique na janela {} ({})", entry.id, entry.title);
+                return TaskbarAction::ToggleWindow(entry.id);
+            }
         }
 
         // Clique em outra área da taskbar
-        false
+        TaskbarAction::None
     }
 
     /// Desenha apenas o conteúdo do menu iniciar em uma janela dedicada.
@@ -396,9 +423,6 @@ impl Taskbar {
 
         // Separador
         window.fill_rect(x + 16, y + 50, menu_width - 32, 1, colors::TASKBAR_BORDER);
-
-        // Item: Terminal (Pode usar botões reais no futuro)
-        self.draw_menu_item(window, x + 16, y + 60, "Terminal", true);
 
         // Item: Settings (desabilitado)
         self.draw_menu_item(window, x + 16, y + 100, "Configuracoes", false);

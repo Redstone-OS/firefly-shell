@@ -9,10 +9,15 @@
 //! - Processar eventos de entrada
 //! - Loop principal de renderização
 
+use crate::ui::taskbar::TaskbarAction;
 use crate::ui::{Taskbar, Wallpaper};
+use alloc::string::ToString;
+use redpowder::ipc::Port;
 use redpowder::println;
 use redpowder::syscall::SysResult;
-use redpowder::window::Window;
+use redpowder::window::{
+    opcodes, RegisterTaskbarRequest, Window, WindowLifecycleEvent, COMPOSITOR_PORT,
+};
 
 // ============================================================================
 // CONSTANTES
@@ -21,6 +26,7 @@ use redpowder::window::Window;
 /// Intervalo de idle entre frames (ms) - reservado para uso futuro
 #[allow(dead_code)]
 const IDLE_INTERVAL_MS: u64 = 16;
+const LISTENER_PORT_NAME: &str = "shell.taskbar";
 
 // ============================================================================
 // DESKTOP
@@ -29,6 +35,8 @@ const IDLE_INTERVAL_MS: u64 = 16;
 pub struct Desktop {
     /// Janela principal do desktop (Wallpaper + Taskbar)
     window: Window,
+    /// Porta para receber eventos globais (lifecycle)
+    listener_port: Port,
     /// Janela do menu iniciar (aberta sob demanda)
     menu_window: Option<Window>,
     /// Componente de wallpaper
@@ -55,7 +63,7 @@ impl Desktop {
         );
 
         // Criar janela única com flag 0x08 (FULLSCREEN/Background)
-        let window = Window::create_with_flags(0, 0, screen_width, screen_height, 0x08)?;
+        let window = Window::create_with_flags(0, 0, screen_width, screen_height, 0x08, "Shell")?;
 
         println!("[Shell] Desktop inicializado com sucesso!");
 
@@ -63,8 +71,41 @@ impl Desktop {
         let taskbar = Taskbar::new(screen_width, screen_height);
         let wallpaper = Wallpaper::with_bounds(0, 0, screen_width, screen_height);
 
+        // Criar porta listener para eventos
+        let listener_port = Port::create(LISTENER_PORT_NAME, 4096)?;
+        println!("[Shell] Listener port criada: '{}'", LISTENER_PORT_NAME);
+
+        // Registrar como taskbar no compositor
+        // Usamos uma porta temporária para enviar ao compositor
+        // TODO: encapsular isso melhor se possível
+        match Port::connect(COMPOSITOR_PORT) {
+            Ok(compositor) => {
+                let mut port_name_buf = [0u8; 32];
+                let bytes = LISTENER_PORT_NAME.as_bytes();
+                let len = bytes.len().min(32);
+                port_name_buf[..len].copy_from_slice(&bytes[..len]);
+
+                let req = RegisterTaskbarRequest {
+                    op: opcodes::REGISTER_TASKBAR,
+                    listener_port: port_name_buf,
+                };
+
+                let req_bytes = unsafe {
+                    core::slice::from_raw_parts(
+                        &req as *const _ as *const u8,
+                        core::mem::size_of::<RegisterTaskbarRequest>(),
+                    )
+                };
+
+                let _ = compositor.send(req_bytes, 0);
+                println!("[Shell] Solicitacao de registro enviada");
+            }
+            Err(e) => println!("[Shell] Erro ao conectar compositor: {:?}", e),
+        }
+
         Ok(Self {
             window,
+            listener_port,
             menu_window: None,
             wallpaper,
             taskbar,
@@ -79,7 +120,7 @@ impl Desktop {
 
         for attempt in 1..=MAX_RETRIES {
             // API: Window::create(x, y, width, height)
-            match Window::create(0, 0, width, height) {
+            match Window::create(0, 0, width, height, "Shell (Retry)") {
                 Ok(w) => {
                     println!("[Shell] Conectado ao compositor (tentativa {})", attempt);
                     return Ok(w);
@@ -133,17 +174,93 @@ impl Desktop {
                         let click_y = (input.param2 >> 16) as i32;
 
                         // Se clicar na taskbar (parte inferior)
-                        if self.taskbar.handle_click(click_x, click_y) {
-                            toggle_requested = true;
-                        } else {
-                            // Se clicar fora do menu, fechar o menu se estiver aberto
-                            if self.taskbar.start_menu_open {
-                                close_requested = true;
+                        match self.taskbar.handle_click(click_x, click_y) {
+                            TaskbarAction::ToggleStartMenu => {
+                                toggle_requested = true;
+                            }
+                            TaskbarAction::ToggleWindow(id) => {
+                                // Enviar comando de Toggle para a janela
+                                println!("[Shell] Toggle Window {}", id);
+
+                                // Determinar estado atual e inverter
+                                let is_minimized =
+                                    self.taskbar.get_window_state(id).unwrap_or(false);
+
+                                // Precisamos enviar MINIMIZE ou RESTORE.
+                                // Usamos uma porta temporária para o Compositor.
+                                // Idealmente a struct Window teria helper static
+                                if let Ok(compositor) = Port::connect(COMPOSITOR_PORT) {
+                                    let op = if is_minimized {
+                                        opcodes::RESTORE_WINDOW
+                                    } else {
+                                        opcodes::MINIMIZE_WINDOW
+                                    };
+
+                                    // Reusando struct de DestroyWindow que tem apenas window_id
+                                    // Ou criando a request na mão. Minimize/Restore usam protocol simples?
+                                    // Compositor: handle_minimize_window usa o proprio ID ou struct?
+                                    // Compositor check: if data.len() < sizeof(DestroyWindowRequest)
+                                    // DestroyWindowRequest tem window_id. Vamos reusar.
+                                    let req = redpowder::window::DestroyWindowRequest {
+                                        op,
+                                        window_id: id,
+                                    };
+                                    let bytes = unsafe {
+                                        core::slice::from_raw_parts(
+                                            &req as *const _ as *const u8,
+                                            core::mem::size_of::<
+                                                redpowder::window::DestroyWindowRequest,
+                                            >(),
+                                        )
+                                    };
+                                    let _ = compositor.send(bytes, 0);
+                                }
+                            }
+                            TaskbarAction::None => {
+                                // Se clicar fora do menu, fechar o menu se estiver aberto
+                                if self.taskbar.start_menu_open {
+                                    close_requested = true;
+                                }
                             }
                         }
                     }
                 }
                 _ => {}
+            }
+        }
+
+        // 2. Processar eventos de Lifecycle (listener port)
+        let mut msg_buf = [0u8; 256];
+        while let Ok(n) = self.listener_port.recv(&mut msg_buf, 0) {
+            if n >= core::mem::size_of::<WindowLifecycleEvent>() {
+                let evt = unsafe { &*(msg_buf.as_ptr() as *const WindowLifecycleEvent) };
+                if evt.op == opcodes::EVENT_WINDOW_LIFECYCLE {
+                    let title_len = evt
+                        .title
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(evt.title.len());
+                    let title = core::str::from_utf8(&evt.title[..title_len])
+                        .unwrap_or("?")
+                        .to_string();
+
+                    match evt.event_type {
+                        redpowder::window::lifecycle_events::CREATED => {
+                            self.taskbar.add_window(evt.window_id, title)
+                        }
+                        redpowder::window::lifecycle_events::DESTROYED => {
+                            self.taskbar.remove_window(evt.window_id)
+                        }
+                        redpowder::window::lifecycle_events::MINIMIZED => {
+                            self.taskbar.set_window_minimized(evt.window_id, true)
+                        }
+                        redpowder::window::lifecycle_events::RESTORED => {
+                            self.taskbar.set_window_minimized(evt.window_id, false)
+                        }
+                        _ => {}
+                    }
+                    self.dirty = true;
+                }
             }
         }
 
@@ -178,6 +295,7 @@ impl Desktop {
                 menu_w,
                 menu_h,
                 0x01u32,
+                "Start Menu",
             ) {
                 Ok(w) => self.menu_window = Some(w),
                 Err(e) => println!("[Shell] Erro ao criar janela de menu: {:?}", e),
