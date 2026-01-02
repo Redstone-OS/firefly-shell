@@ -85,11 +85,6 @@ impl Taskbar {
 
         // System Tray (canto direito)
         self.draw_system_tray(window);
-
-        // Menu iniciar (se aberto)
-        if self.start_menu_open {
-            self.draw_start_menu(window);
-        }
     }
 
     /// Desenha o botão iniciar.
@@ -366,5 +361,49 @@ impl Taskbar {
 
         // Clique em outra área da taskbar
         false
+    }
+
+    /// Desenha apenas o conteúdo do menu iniciar em uma janela dedicada.
+    pub fn draw_menu_content(&self, window: &mut Window) {
+        let menu_width = window.width;
+        let menu_height = window.height;
+        let x = 0;
+        let y = 0;
+
+        // Fundo do menu
+        window.fill_rect(x, y, menu_width, menu_height, colors::MENU_BG);
+
+        // Borda
+        window.fill_rect(x, y, menu_width, 1, colors::TASKBAR_BORDER);
+        window.fill_rect(x, y, 1, menu_height, colors::TASKBAR_BORDER);
+        window.fill_rect(
+            x + menu_width - 1,
+            y,
+            1,
+            menu_height,
+            colors::TASKBAR_BORDER,
+        );
+        window.fill_rect(
+            x,
+            y + menu_height - 1,
+            menu_width,
+            1,
+            colors::TASKBAR_BORDER,
+        );
+
+        // Título "RedstoneOS"
+        self.draw_menu_title(window, x + 16, y + 16);
+
+        // Separador
+        window.fill_rect(x + 16, y + 50, menu_width - 32, 1, colors::TASKBAR_BORDER);
+
+        // Item: Terminal (Pode usar botões reais no futuro)
+        self.draw_menu_item(window, x + 16, y + 60, "Terminal", true);
+
+        // Item: Settings (desabilitado)
+        self.draw_menu_item(window, x + 16, y + 100, "Configuracoes", false);
+
+        // Item: Sobre
+        self.draw_menu_item(window, x + 16, y + 140, "Sobre", false);
     }
 }
