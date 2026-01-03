@@ -167,3 +167,18 @@ pub fn get_char_bitmap(c: char) -> Option<&'static [u8; 8]> {
 pub fn measure_text_width(text: &str) -> u32 {
     text.chars().count() as u32 * CHAR_WIDTH
 }
+
+/// Wrapper para a fonte.
+pub struct Font;
+
+impl Font {
+    /// Obtém bitmap de caractere.
+    pub fn get_char(c: char) -> Option<&'static [u8; 8]> {
+        get_char_bitmap(c)
+    }
+
+    /// Mede texto.
+    pub fn measure(text: &str) -> u32 {
+        measure_text_width(text)
+    }
+}

@@ -1,30 +1,37 @@
-//! # Firefly Shell v0.2.0
+//! # Firefly Shell v0.3.0
 //!
 //! Shell gráfico para RedstoneOS.
 //!
-//! ## Features v0.2.0
+//! ## Features v0.3.0
 //!
-//! - **Menu Iniciar Funcional**: Lista apps de `/apps/` recursivamente
-//! - **Lançamento de Apps**: Clique para executar aplicativos
-//! - **Taskbar Dinâmica**: Mostra janelas abertas com ícones
-//! - **Relógio de Uptime**: Mostra tempo desde o boot
+//! - **Taskbar Flutuante**: 3 barras com efeito glass
+//! - **Painel de Widgets**: Slide-up da esquerda
+//! - **Quick Settings**: Configurações rápidas da direita
+//! - **Menu Iniciar**: Lista apps com ícones do app.toml
+//! - **Wallpaper**: Suporte a webp com fallback gradiente
 //!
 //! ## Arquitetura
 //!
 //! ```text
 //! shell/src/
-//! ├── main.rs          # Entry point
-//! ├── app/             # Gerenciamento de apps
-//! │   ├── desktop.rs   # Desktop Environment
-//! │   ├── discovery.rs # Descoberta de apps
-//! │   └── launcher.rs  # Lançamento de apps
-//! ├── ui/              # Componentes visuais
-//! │   ├── taskbar.rs   # Barra de tarefas
-//! │   └── wallpaper.rs # Papel de parede
-//! ├── theme/           # Sistema de temas
-//! │   └── colors.rs    # Paleta de cores
-//! └── render/          # Renderização
-//!     └── font.rs      # Fontes
+//! ├── main.rs           # Entry point
+//! ├── app/              # Gerenciamento de apps
+//! │   ├── desktop.rs    # Desktop Environment
+//! │   ├── discovery.rs  # Descoberta de apps (app.toml)
+//! │   └── launcher.rs   # Lançamento de apps
+//! ├── ui/               # Componentes visuais
+//! │   ├── wallpaper.rs  # Papel de parede
+//! │   ├── taskbar.rs    # Barras flutuantes
+//! │   └── panels/       # Painéis popup
+//! │       ├── widget_panel.rs
+//! │       ├── start_menu.rs
+//! │       └── quick_settings.rs
+//! ├── theme/            # Sistema de temas
+//! │   ├── colors.rs     # Paleta de cores
+//! │   ├── glass.rs      # Efeitos de vidro
+//! │   └── metrics.rs    # Métricas de layout
+//! └── render/           # Renderização
+//!     └── font.rs       # Fontes
 //! ```
 
 #![no_std]
@@ -39,11 +46,11 @@ mod ui;
 
 use redpowder::println;
 
-// ============================================================================
+// =============================================================================
 // RUNTIME NO_STD
-// ============================================================================
+// =============================================================================
 
-/// Allocator global usando syscalls.
+/// Allocator global.
 #[global_allocator]
 static ALLOCATOR: redpowder::mem::heap::SyscallAllocator = redpowder::mem::heap::SyscallAllocator;
 
@@ -54,20 +61,18 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     redpowder::process::exit(1);
 }
 
-// ============================================================================
-// PONTO DE ENTRADA
-// ============================================================================
+// =============================================================================
+// ENTRY POINT
+// =============================================================================
 
-/// Ponto de entrada do shell.
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     main()
 }
 
-/// Função principal.
 fn main() -> ! {
     println!("[Shell] ========================================");
-    println!("[Shell] Firefly Shell v0.2.0");
+    println!("[Shell] Firefly Shell v0.3.0");
     println!("[Shell] ========================================");
 
     match app::Desktop::new() {
@@ -75,7 +80,7 @@ fn main() -> ! {
             desktop.run();
         }
         Err(e) => {
-            println!("[Shell] FATAL: Erro ao inicializar desktop: {:?}", e);
+            println!("[Shell] FATAL: Erro ao inicializar: {:?}", e);
             redpowder::process::exit(1);
         }
     }

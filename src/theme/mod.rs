@@ -1,8 +1,17 @@
-//! # Theme Module - Sistema de Temas
+//! # Theme Module
 //!
-//! Define cores e estilos visuais do Shell.
+//! Sistema de temas do Shell.
+//!
+//! ## Componentes
+//!
+//! - **colors**: Paleta de cores usando gfx_types
+//! - **glass**: Efeitos de vidro/blur
+//! - **metrics**: Métricas de layout
 
 pub mod colors;
+pub mod glass;
+pub mod metrics;
 
-// Re-export específico ao invés de wildcard
-// Removido pub use colors::* pois o taskbar usa crate::theme::colors diretamente
+pub use colors::*;
+pub use glass::*;
+pub use metrics::*;

@@ -1,83 +1,139 @@
 //! # Colors - Paleta de Cores
 //!
-//! Definições centralizadas de todas as cores usadas no Shell.
-//! Formato: ARGB (Alpha, Red, Green, Blue)
+//! Definições centralizadas usando gfx_types::Color.
 
 #![allow(dead_code)]
 
-// ============================================================================
-// CORES DO DESKTOP
-// ============================================================================
+use gfx_types::color::Color;
 
-/// Cor do wallpaper (Laranja Redstone)
-pub const WALLPAPER_COLOR: u32 = 0xFFFF4500;
+// =============================================================================
+// CORES PRIMÁRIAS (REDSTONE THEME)
+// =============================================================================
 
-/// Cor de fundo alternativa (cinza escuro)
-pub const DESKTOP_BG_DARK: u32 = 0xFF1a1a2e;
+/// Cor de destaque principal (Redstone Orange)
+pub const ACCENT: Color = Color(0xFFFF6B35);
 
-// ============================================================================
+/// Cor de destaque secundária
+pub const ACCENT_LIGHT: Color = Color(0xFFFF8B55);
+
+/// Cor de destaque escura
+pub const ACCENT_DARK: Color = Color(0xFFE55520);
+
+// =============================================================================
+// CORES DE FUNDO
+// =============================================================================
+
+/// Fundo do desktop (fallback)
+pub const DESKTOP_BG: Color = Color(0xFF1a1a2e);
+
+/// Fundo escuro
+pub const BG_DARK: Color = Color(0xFF0D0D15);
+
+/// Fundo médio
+pub const BG_MEDIUM: Color = Color(0xFF1E1E28);
+
+/// Fundo claro
+pub const BG_LIGHT: Color = Color(0xFF2A2A38);
+
+// =============================================================================
+// CORES DE GLASS (EFEITO VIDRO)
+// =============================================================================
+
+/// Fundo glass (semi-transparente escuro)
+pub const GLASS_BG: Color = Color(0xD0181822);
+
+/// Fundo glass hover
+pub const GLASS_BG_HOVER: Color = Color(0xE0252535);
+
+/// Fundo glass ativo
+pub const GLASS_BG_ACTIVE: Color = Color(0xF0303045);
+
+/// Borda glass
+pub const GLASS_BORDER: Color = Color(0x40FFFFFF);
+
+/// Borda glass highlight (topo)
+pub const GLASS_BORDER_LIGHT: Color = Color(0x30FFFFFF);
+
+// =============================================================================
 // CORES DA TASKBAR
-// ============================================================================
+// =============================================================================
 
-/// Cor de fundo da taskbar (escuro translúcido)
-pub const TASKBAR_BG: u32 = 0xFF1E1E28;
+/// Fundo da barra (glass)
+pub const TASKBAR_BG: Color = Color(0xD8181822);
 
-/// Cor da borda superior da taskbar
-pub const TASKBAR_BORDER: u32 = 0xFF3C3C50;
+/// Borda da barra
+pub const TASKBAR_BORDER: Color = Color(0x50FFFFFF);
 
-/// Cor do botão iniciar
-pub const START_BUTTON_BG: u32 = 0xFF4682B4;
+/// Highlight interno (efeito glass)
+pub const TASKBAR_HIGHLIGHT: Color = Color(0x15FFFFFF);
 
-/// Cor do botão iniciar quando ativo/pressionado
-pub const START_BUTTON_ACTIVE: u32 = 0xFF5A92C4;
-
-/// Cor do botão de app ativo
-pub const APP_BUTTON_ACTIVE: u32 = 0xFF3A3A4C;
-
-/// Cor do botão de app hover
-pub const APP_BUTTON_HOVER: u32 = 0xFF4A4A5C;
-
-/// Cor de destaque (indicador de app ativo)
-pub const ACCENT: u32 = 0xFFFF6B35;
-
-// ============================================================================
+// =============================================================================
 // CORES DO MENU
-// ============================================================================
+// =============================================================================
 
-/// Cor de fundo do menu
-pub const MENU_BG: u32 = 0xFF252530;
+/// Fundo do menu
+pub const MENU_BG: Color = Color(0xE5181822);
 
-/// Cor do item hover
-pub const MENU_ITEM_HOVER: u32 = 0xFF3A3A4C;
+/// Item do menu hover
+pub const MENU_ITEM_HOVER: Color = Color(0xFF2A2A3C);
 
-// ============================================================================
-// CORES DE TEXTO/ÍCONES
-// ============================================================================
+/// Item do menu selecionado
+pub const MENU_ITEM_SELECTED: Color = Color(0xFF3A3A4C);
 
-/// Branco puro
-pub const WHITE: u32 = 0xFFFFFFFF;
+/// Separador do menu
+pub const MENU_SEPARATOR: Color = Color(0x30FFFFFF);
 
-/// Texto secundário (cinza claro)
-pub const TEXT_SECONDARY: u32 = 0xFFAAAAAA;
+// =============================================================================
+// CORES DE TEXTO
+// =============================================================================
 
-/// Texto desativado
-pub const TEXT_DISABLED: u32 = 0xFF666666;
+/// Texto primário (branco)
+pub const TEXT_PRIMARY: Color = Color::WHITE;
 
-/// Verde (indicadores positivos)
-pub const GREEN: u32 = 0xFF3FB950;
+/// Texto secundário
+pub const TEXT_SECONDARY: Color = Color(0xFFAAAAAA);
 
-// ============================================================================
-// CORES DO SISTEMA
-// ============================================================================
+/// Texto desabilitado
+pub const TEXT_DISABLED: Color = Color(0xFF666666);
 
-/// Transparente
-pub const TRANSPARENT: u32 = 0x00000000;
+/// Texto sobre accent
+pub const TEXT_ON_ACCENT: Color = Color::WHITE;
 
-/// Preto
-pub const BLACK: u32 = 0xFF000000;
+// =============================================================================
+// CORES DE ÍCONES
+// =============================================================================
 
-/// Vermelho (erro/fechar)
-pub const RED: u32 = 0xFFFF0000;
+/// Ícone normal
+pub const ICON_NORMAL: Color = Color(0xFFDDDDDD);
 
-/// Azul (informação)
-pub const BLUE: u32 = 0xFF0000FF;
+/// Ícone ativo
+pub const ICON_ACTIVE: Color = Color::WHITE;
+
+/// Ícone desabilitado
+pub const ICON_DISABLED: Color = Color(0xFF555555);
+
+// =============================================================================
+// CORES DE STATUS
+// =============================================================================
+
+/// Sucesso (verde)
+pub const SUCCESS: Color = Color(0xFF3FB950);
+
+/// Aviso (amarelo)
+pub const WARNING: Color = Color(0xFFF0B429);
+
+/// Erro (vermelho)
+pub const ERROR: Color = Color(0xFFE53935);
+
+/// Info (azul)
+pub const INFO: Color = Color(0xFF4A90D9);
+
+// =============================================================================
+// GRADIENTE DO WALLPAPER (FALLBACK)
+// =============================================================================
+
+/// Cor do topo do gradiente
+pub const WALLPAPER_GRADIENT_TOP: Color = Color(0xFFFF4500);
+
+/// Cor do fundo do gradiente
+pub const WALLPAPER_GRADIENT_BOTTOM: Color = Color(0xFFCC3500);

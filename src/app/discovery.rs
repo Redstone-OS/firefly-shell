@@ -1,202 +1,225 @@
 //! # App Discovery
 //!
-//! Módulo para descobrir aplicativos disponíveis no sistema.
+//! Descoberta de aplicativos no sistema.
 //!
-//! Os aplicativos são buscados em `/apps/` recursivamente.
+//! ## Estrutura de Apps
+//!
+//! ```text
+//! /apps/<vendor>/<name>/
+//! ├── <name>.app         # Executável
+//! ├── app.toml           # Metadados
+//! └── assets/
+//!     └── <icon>.svg     # Ícone
+//! ```
 
-use alloc::string::String;
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use redpowder::fs::{exists, is_dir, Dir};
-use redpowder::println;
+use redpowder::fs::{list_dir, File};
 
-/// Representação de um aplicativo descoberto
-#[derive(Clone)]
+// =============================================================================
+// CONSTANTES
+// =============================================================================
+
+/// Diretório raiz de apps.
+const APPS_ROOT: &str = "/apps";
+
+/// Nome do arquivo de manifesto.
+const APP_MANIFEST: &str = "app.toml";
+
+// =============================================================================
+// APP INFO
+// =============================================================================
+
+/// Informações de um aplicativo.
+#[derive(Debug, Clone)]
 pub struct AppInfo {
-    /// Nome de exibição do app
+    /// ID único (vendor.name).
+    pub id: String,
+    /// Nome de exibição.
     pub name: String,
-    /// Caminho completo do executável
+    /// Vendor/publisher.
+    pub vendor: String,
+    /// Caminho do executável.
     pub path: String,
-    /// Ícone (placeholder por enquanto)
-    pub icon: AppIcon,
-    /// Categoria (system, user, game, etc)
-    pub category: AppCategory,
-}
-
-/// Ícone do aplicativo
-#[derive(Clone, Copy, PartialEq)]
-pub enum AppIcon {
-    Terminal,
-    Settings,
-    FileManager,
-    Game,
-    Editor,
-    Browser,
-    Generic,
-}
-
-/// Categoria do aplicativo
-#[derive(Clone, Copy, PartialEq)]
-#[allow(dead_code)]
-pub enum AppCategory {
-    System,
-    Utility,
-    Game,
-    Other,
+    /// Caminho do ícone.
+    pub icon_path: Option<String>,
+    /// Categoria.
+    pub category: String,
 }
 
 impl AppInfo {
-    /// Cria novo AppInfo
-    pub fn new(name: &str, path: &str) -> Self {
-        let name_lower = name.to_lowercase();
+    /// Cria AppInfo a partir de um diretório.
+    fn from_directory(vendor: &str, app_dir: &str) -> Option<Self> {
+        let base_path = alloc::format!("{}/{}/{}", APPS_ROOT, vendor, app_dir);
 
-        // Detectar ícone baseado no nome
-        let icon = if name_lower.contains("terminal") {
-            AppIcon::Terminal
-        } else if name_lower.contains("settings") || name_lower.contains("config") {
-            AppIcon::Settings
-        } else if name_lower.contains("files") || name_lower.contains("filemanager") {
-            AppIcon::FileManager
-        } else if name_lower.contains("game") {
-            AppIcon::Game
-        } else if name_lower.contains("editor") || name_lower.contains("notepad") {
-            AppIcon::Editor
-        } else if name_lower.contains("browser") || name_lower.contains("web") {
-            AppIcon::Browser
-        } else {
-            AppIcon::Generic
-        };
+        // Procurar arquivo .app
+        let app_file = Self::find_app_file(&base_path)?;
 
-        // Detectar categoria pelo path
-        let category = if path.contains("/system/") {
-            AppCategory::System
-        } else if path.contains("/games/") {
-            AppCategory::Game
-        } else {
-            AppCategory::Other
-        };
+        // Tentar ler app.toml
+        let manifest_path = alloc::format!("{}/{}", base_path, APP_MANIFEST);
+        let (name, icon_path, category) = Self::parse_manifest(&manifest_path, &base_path, app_dir);
 
-        Self {
-            name: String::from(name),
-            path: String::from(path),
-            icon,
+        Some(Self {
+            id: alloc::format!("{}.{}", vendor, app_dir),
+            name,
+            vendor: vendor.to_string(),
+            path: alloc::format!("{}/{}", base_path, app_file),
+            icon_path,
             category,
+        })
+    }
+
+    /// Encontra arquivo .app no diretório.
+    fn find_app_file(base_path: &str) -> Option<String> {
+        if let Ok(entries) = list_dir(base_path) {
+            for entry in entries {
+                let name = entry.name();
+                if name.ends_with(".app") {
+                    return Some(name.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    /// Parse do app.toml.
+    fn parse_manifest(
+        manifest_path: &str,
+        base_path: &str,
+        fallback_name: &str,
+    ) -> (String, Option<String>, String) {
+        let mut name = fallback_name.to_string();
+        let mut icon_path: Option<String> = None;
+        let mut category = "other".to_string();
+
+        if let Ok(file) = File::open(manifest_path) {
+            // Ler conteúdo
+            let mut buf = [0u8; 1024];
+            if let Ok(n) = file.read(&mut buf) {
+                if let Ok(content) = core::str::from_utf8(&buf[..n]) {
+                    // Parser TOML simples
+                    for line in content.lines() {
+                        let line = line.trim();
+
+                        if line.starts_with("name") {
+                            if let Some(value) = Self::extract_string_value(line) {
+                                name = value;
+                            }
+                        } else if line.starts_with("icon") {
+                            if let Some(value) = Self::extract_string_value(line) {
+                                icon_path = Some(alloc::format!("{}/assets/{}", base_path, value));
+                            }
+                        } else if line.starts_with("category") {
+                            if let Some(value) = Self::extract_string_value(line) {
+                                category = value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (name, icon_path, category)
+    }
+
+    /// Extrai valor de string de uma linha TOML.
+    fn extract_string_value(line: &str) -> Option<String> {
+        if let Some(eq_pos) = line.find('=') {
+            let value = line[eq_pos + 1..].trim();
+            if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                return Some(value[1..value.len() - 1].to_string());
+            }
+        }
+        None
+    }
+}
+
+/// Ícone de app (placeholder por enquanto).
+#[derive(Debug, Clone)]
+pub struct AppIcon {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u32>,
+}
+
+impl Default for AppIcon {
+    fn default() -> Self {
+        Self {
+            width: 32,
+            height: 32,
+            data: Vec::new(),
         }
     }
 }
 
-/// Descobre todos os aplicativos no sistema
+// =============================================================================
+// DISCOVERY
+// =============================================================================
+
+/// Descobre todos os apps instalados.
+///
+/// TODO: Re-habilitar quando o filesystem estiver mais estável.
+/// Por enquanto retorna vetor vazio para evitar crash durante boot.
 pub fn discover_apps() -> Vec<AppInfo> {
+    redpowder::println!("[Discovery] Descoberta de apps desabilitada temporariamente");
+    Vec::new()
+
+    /* ORIGINAL - reabilitar quando filesystem estiver estável:
     let mut apps = Vec::new();
 
-    println!("[Shell] Escaneando /apps...");
+    redpowder::println!("[Discovery] Buscando apps em {}", APPS_ROOT);
 
-    // Buscar em /apps recursivamente
-    scan_directory("/apps", &mut apps, 0);
-
-    // Ordenar por nome
-    apps.sort_by(|a, b| a.name.cmp(&b.name));
-
-    apps
-}
-
-/// Escaneia um diretório recursivamente buscando executáveis
-fn scan_directory(path: &str, apps: &mut Vec<AppInfo>, depth: usize) {
-    // Limitar profundidade para evitar loops infinitos
-    if depth > 4 {
-        return;
-    }
-
-    println!("[Shell] Escaneando: {} (depth {})", path, depth);
-
-    let dir = match Dir::open(path) {
-        Ok(d) => d,
-        Err(e) => {
-            println!("[Shell] Erro ao abrir {}: {:?}", path, e);
-            return;
-        }
-    };
-
-    for entry in dir.entries() {
-        let name = entry.name();
-
-        // Ignorar . e .. e arquivos ocultos
-        if name.is_empty() || name.starts_with('.') {
-            continue;
-        }
-
-        // Construir path completo
-        let full_path = join_path(path, name);
-
-        println!("[Shell]   Entry: {} (is_dir={})", name, entry.is_dir());
-
-        if entry.is_dir() {
-            // Se for diretório, verificar se contém um executável com o mesmo nome
-            // Ex: /apps/system/terminal/terminal -> app "terminal"
-            let potential_exe = join_path(&full_path, name);
-
-            if file_exists(&potential_exe) {
-                println!("[Shell]   -> App encontrado: {}", potential_exe);
-                let display_name = capitalize(name);
-                apps.push(AppInfo::new(&display_name, &potential_exe));
-            } else {
-                // Recursar no diretório
-                scan_directory(&full_path, apps, depth + 1);
+    // Listar vendors
+    if let Ok(vendors) = list_dir(APPS_ROOT) {
+        for vendor_entry in vendors {
+            if !vendor_entry.is_dir() {
+                continue;
             }
-        } else {
-            // Se for arquivo executável diretamente em /apps
-            if is_executable_name(name) {
-                println!("[Shell]   -> Executável: {}", full_path);
-                let display_name = capitalize(stem(name));
-                apps.push(AppInfo::new(&display_name, &full_path));
+
+            let vendor_name = vendor_entry.name();
+
+            // Ignorar . e ..
+            if vendor_name == "." || vendor_name == ".." {
+                continue;
+            }
+
+            let vendor_path = alloc::format!("{}/{}", APPS_ROOT, vendor_name);
+
+            redpowder::println!("[Discovery] Vendor: {}", vendor_name);
+
+            // Listar apps do vendor
+            if let Ok(app_dirs) = list_dir(&vendor_path) {
+                for app_entry in app_dirs {
+                    if !app_entry.is_dir() {
+                        continue;
+                    }
+
+                    let app_name = app_entry.name();
+
+                    // Ignorar . e ..
+                    if app_name == "." || app_name == ".." {
+                        continue;
+                    }
+
+                    if let Some(app_info) = AppInfo::from_directory(vendor_name, app_name) {
+                        redpowder::println!(
+                            "[Discovery]   App: {} ({})",
+                            app_info.name,
+                            app_info.path
+                        );
+                        apps.push(app_info);
+                    }
+                }
             }
         }
-    }
-}
-
-/// Verifica se um arquivo é potencialmente executável
-fn is_executable_name(name: &str) -> bool {
-    // Sem extensão ou .elf
-    if name.contains('.') {
-        name.ends_with(".elf")
     } else {
-        true
-    }
-}
-
-/// Verifica se um path existe como arquivo (não diretório)
-fn file_exists(path: &str) -> bool {
-    exists(path) && !is_dir(path)
-}
-
-/// Junta dois paths
-fn join_path(base: &str, child: &str) -> String {
-    let mut path = String::from(base.trim_end_matches('/'));
-    path.push('/');
-    path.push_str(child);
-    path
-}
-
-/// Obtém o nome base sem extensão
-fn stem(name: &str) -> &str {
-    if let Some(pos) = name.rfind('.') {
-        if pos > 0 {
-            return &name[..pos];
-        }
-    }
-    name
-}
-
-/// Capitaliza a primeira letra
-fn capitalize(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars();
-
-    if let Some(first) = chars.next() {
-        result.push(first.to_ascii_uppercase());
-    }
-    for c in chars {
-        result.push(c);
+        redpowder::println!("[Discovery] Falha ao ler {}", APPS_ROOT);
     }
 
-    result
+    redpowder::println!("[Discovery] {} apps encontrados", apps.len());
+    apps
+    */
 }

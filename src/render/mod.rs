@@ -1,9 +1,7 @@
-//! # Render Module - Renderização
+//! # Render Module
 //!
-//! Funções de renderização e fonte bitmap.
-//! Nota: O módulo font existe para uso futuro quando texto for necessário no shell.
+//! Renderização do Shell.
 
 pub mod font;
 
-// Remover re-export não utilizado para evitar warnings
-// A fonte será usada quando implementarmos texto na UI
+pub use font::Font;
