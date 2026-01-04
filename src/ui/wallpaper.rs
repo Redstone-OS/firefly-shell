@@ -2,7 +2,8 @@
 //!
 //! Componente de papel de parede.
 //! Tenta carregar webp, fallback para gradiente.
-
+// TODO: Revisar no futuro
+#[allow(unused)]
 use gfx_types::color::Color;
 use gfx_types::geometry::{Rect, Size};
 
@@ -12,6 +13,8 @@ use crate::theme::colors;
 // CONSTANTES
 // =============================================================================
 
+// TODO: Revisar no futuro
+#[allow(unused)]
 /// Caminho do wallpaper padrão.
 const DEFAULT_WALLPAPER_PATH: &str = "/system/resources/wallpapers/default.webp";
 
@@ -162,6 +165,8 @@ impl Wallpaper {
         }
     }
 
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     /// Define bounds.
     pub fn set_bounds(&mut self, x: i32, y: i32, width: u32, height: u32) {
         self.bounds = Rect::new(x, y, width, height);

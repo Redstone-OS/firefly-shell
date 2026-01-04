@@ -45,6 +45,8 @@ pub trait Panel {
     }
 
     /// Retorna bounds.
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     fn bounds(&self) -> Rect;
 
     /// Desenha o painel.

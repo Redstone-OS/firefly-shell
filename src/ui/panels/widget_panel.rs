@@ -26,6 +26,8 @@ pub struct WidgetPanel {
 
 impl WidgetPanel {
     /// Cria novo painel.
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     pub fn new(screen_width: u32, screen_height: u32) -> Self {
         let margin = metrics::TASKBAR_MARGIN;
         let taskbar_y = screen_height as i32 - metrics::TASKBAR_HEIGHT as i32 - margin as i32;

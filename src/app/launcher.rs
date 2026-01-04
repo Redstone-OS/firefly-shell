@@ -23,6 +23,8 @@ pub fn launch_app(path: &str) -> bool {
     }
 }
 
+// TODO: Revisar no futuro
+#[allow(unused)]
 /// Lança app por AppInfo.
 pub fn launch_app_info(app: &super::AppInfo) -> bool {
     launch_app(&app.path)

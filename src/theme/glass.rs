@@ -49,6 +49,8 @@ impl GlassStyle {
         }
     }
 
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     /// Estilo para botões.
     pub const fn button() -> Self {
         Self {
@@ -60,6 +62,8 @@ impl GlassStyle {
         }
     }
 
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     /// Estilo hover.
     pub const fn button_hover() -> Self {
         Self {
@@ -71,6 +75,8 @@ impl GlassStyle {
         }
     }
 
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     /// Estilo ativo/pressionado.
     pub const fn button_active() -> Self {
         Self {

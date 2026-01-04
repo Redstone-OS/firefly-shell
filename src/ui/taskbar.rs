@@ -2,6 +2,8 @@
 //!
 //! Barra de tarefas com 3 barras flutuantes.
 
+// TODO: Revisar no futuro
+#[allow(unused)]
 use gfx_types::color::Color;
 use gfx_types::geometry::{Point, Rect, Size};
 
@@ -15,6 +17,8 @@ use alloc::vec::Vec;
 // TIPOS
 // =============================================================================
 
+// TODO: Revisar no futuro
+#[allow(unused)]
 /// Ação retornada pelo tratamento de clique.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TaskbarAction {
@@ -26,6 +30,8 @@ pub enum TaskbarAction {
     LaunchApp(usize),
 }
 
+// TODO: Revisar no futuro
+#[allow(unused)]
 /// Entrada de janela na taskbar.
 #[derive(Clone)]
 struct WindowEntry {
@@ -63,6 +69,8 @@ pub struct Taskbar {
 
     // Hover state
     /// Barra atualmente com hover (0=none, 1=widget, 2=center, 3=status).
+    // TODO: Revisar no futuro
+    #[allow(unused)]
     hover_bar: u8,
 }
 

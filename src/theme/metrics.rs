@@ -16,6 +16,8 @@ pub const TASKBAR_MARGIN: u32 = 8;
 pub const TASKBAR_GAP: u32 = 12;
 
 /// Raio dos cantos das barras.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const TASKBAR_RADIUS: u32 = 12;
 
 /// Padding interno das barras.
@@ -39,9 +41,13 @@ pub const STATUS_BAR_WIDTH: u32 = 140;
 // =============================================================================
 
 /// Tamanho dos botões de ícone.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const ICON_BUTTON_SIZE: u32 = 40;
 
 /// Tamanho dos ícones.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const ICON_SIZE: u32 = 24;
 
 /// Espaçamento entre ícones.
@@ -70,6 +76,8 @@ pub const START_MENU_WIDTH: u32 = 400;
 pub const START_MENU_HEIGHT: u32 = 500;
 
 /// Raio dos painéis.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const PANEL_RADIUS: u32 = 16;
 
 /// Padding interno dos painéis.
@@ -93,12 +101,18 @@ pub const APP_ICON_GAP: u32 = 12;
 // =============================================================================
 
 /// Colunas no grid de apps.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const APP_GRID_COLS: u32 = 4;
 
 /// Tamanho da célula do grid.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const APP_GRID_CELL_SIZE: u32 = 88;
 
 /// Espaçamento do grid.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const APP_GRID_GAP: u32 = 8;
 
 // =============================================================================
@@ -106,7 +120,11 @@ pub const APP_GRID_GAP: u32 = 8;
 // =============================================================================
 
 /// Duração de animação (frames @ 60fps).
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const ANIMATION_DURATION: u32 = 15;
 
 /// Duração curta.
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub const ANIMATION_SHORT: u32 = 8;

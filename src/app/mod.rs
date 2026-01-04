@@ -13,5 +13,7 @@ mod discovery;
 mod launcher;
 
 pub use desktop::Desktop;
+// TODO: Revisar no futuro
+#[allow(unused)]
 pub use discovery::{discover_apps, AppIcon, AppInfo};
 pub use launcher::launch_app;
